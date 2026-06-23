@@ -4,6 +4,7 @@ from bs4 import BeautifulSoup
 from app.scrapers.base import BaseScraper
 from app.scrapers.amazon import Scraper as AmazonScraper
 from app.scrapers.flipkart import Scraper as FlipkartScraper
+from app.scrapers.nykaa import Scraper as NykaaScraper
 
 # Mock HTML sample for search listing
 SEARCH_PAGE_HTML = """
@@ -91,12 +92,15 @@ def test_scraper_url_and_selectors():
     """Test that individual scrapers are properly configured."""
     amazon = AmazonScraper("job-1")
     flipkart = FlipkartScraper("job-2")
+    nykaa = NykaaScraper("job-3")
     
     assert amazon.BASE_URL == "https://www.amazon.in"
     assert flipkart.BASE_URL == "https://www.flipkart.com"
+    assert nykaa.BASE_URL == "https://www.nykaa.com"
     
     assert "search_input" in amazon.SELECTORS
     assert "search_input" in flipkart.SELECTORS
+    assert "search_input" in nykaa.SELECTORS
 
 @patch("selenium.webdriver.Chrome")
 def test_scraper_extracts_listings(mock_chrome):
@@ -282,3 +286,52 @@ def test_flipkart_scraper_extracts_correct_fields(mock_chrome):
     assert "Highlights:" in item["description"]
     assert "Specifications:" in item["description"]
     assert "Processor Brand: AMD" in item["description"]
+
+
+NYKAA_DETAIL_HTML = """
+<div id="content-details">
+  This is an amazing sunscreen with SPF 50. Use daily for best protection.
+  Ingredients: Niacinamide, Zinc PCA, CICA, Ceramides.
+  How to Use: Apply on face.
+</div>
+"""
+
+@patch("selenium.webdriver.Chrome")
+def test_nykaa_scraper_extracts_correct_fields(mock_chrome):
+    """Test that NykaaScraper post-processing extracts and cleans up rating, seller, warranty, specifications and description."""
+    driver_instance = MagicMock()
+    mock_chrome.return_value = driver_instance
+    
+    scraper = NykaaScraper("test-job-nykaa-extract", headless=True)
+    
+    item = {
+        "title": "WishCare Niacinamide Sunscreen (14611 ratings & 3096 reviews)",
+        "url": "https://www.nykaa.com/wishcare-sunscreen/p/123",
+        "price": "₹399",
+        "rating": "4.3/5",
+        "reviews_count": "14611 ratings & 3096 reviews",
+        "image_url": "img.jpg",
+        "specifications": {
+            "Country of Origin": "India"
+        },
+        "_html": NYKAA_DETAIL_HTML
+    }
+    
+    scraper._fix_title(item)
+    scraper._fix_rating(item)
+    scraper._fix_reviews_count(item)
+    scraper._fix_price(item)
+    scraper._fix_brand(item)
+    scraper._fix_seller(item)
+    scraper._fix_warranty(item)
+    scraper._fix_about_items_and_description(item)
+    
+    assert item["title"] == "WishCare Niacinamide Sunscreen"
+    assert item["rating"] == "4.3"
+    assert item["reviews_count"] == "3096"
+    assert item["price"] == "₹399"
+    assert item["brand"] == "WishCare"
+    assert item["seller"] == "Nykaa E Retail Limited"
+    assert "Standard cosmetic" in item["warranty"]
+    assert "sunscreen with SPF 50" in item["description"]
+    assert "sunscreen with SPF 50" in item["about_items"][0]
