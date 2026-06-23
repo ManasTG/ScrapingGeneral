@@ -748,6 +748,7 @@ class BaseScraper:
                     item["seller"] = seller or "Unknown"
                     item["warranty"] = warranty or "N/A"
                     item["reviews"] = reviews_list
+                    item["_html"] = str(detail_soup)
                     
                     results.append(item)
                     self.log(f"[{prod_idx}/{len(target_listings)}] Successfully scraped item details.")

@@ -214,3 +214,71 @@ def test_scraper_cancellation(mock_chrome):
             scraper.scrape("Dell Laptops", limit=2)
             
         assert "cancelled by user" in str(excinfo.value)
+
+
+FLIPKART_DETAIL_HTML = """
+<div>
+  <!-- Product Highlights Header -->
+  <div>Product highlights</div>
+  <div class="grid-formation">
+    <div>AMD Ryzen 5 Quad Core</div>
+  </div>
+  <div class="grid-formation">
+    <div>8 GB | 512 GB</div>
+  </div>
+
+  <!-- Dynamic Specs -->
+  <div class="grid-formation-dynamic">
+    <div>Processor Brand</div>
+    <div>AMD</div>
+  </div>
+  <div class="grid-formation-dynamic">
+    <div>Processor Name</div>
+    <div>Ryzen 5 Quad Core</div>
+  </div>
+
+  <!-- Rating -->
+  <div class="cg31wB">4.3 ★</div>
+
+  <!-- Seller -->
+  <div id="sellerName"><span>RetailNet</span></div>
+</div>
+"""
+
+@patch("selenium.webdriver.Chrome")
+def test_flipkart_scraper_extracts_correct_fields(mock_chrome):
+    """Test that FlipkartScraper post-processing extracts and cleans up rating, seller, warranty, specifications and description."""
+    driver_instance = MagicMock()
+    mock_chrome.return_value = driver_instance
+    
+    scraper = FlipkartScraper("test-job-fk-extract", headless=True)
+    
+    item = {
+        "title": "DELL Laptop (8 Ratings & 3 Reviews)",
+        "url": "https://www.flipkart.com/dell-laptop/p/itme",
+        "price": "₹45,990",
+        "rating": "N/A",
+        "reviews_count": "N/A",
+        "image_url": "img.png",
+        "_html": FLIPKART_DETAIL_HTML
+    }
+    
+    scraper._fix_title(item)
+    scraper._fix_highlights(item)
+    scraper._fix_specifications(item)
+    scraper._fix_rating(item)
+    scraper._fix_reviews_count(item)
+    scraper._fix_seller(item)
+    scraper._fix_warranty(item)
+    scraper._fix_description(item)
+    
+    assert item["title"] == "DELL Laptop"
+    assert "AMD Ryzen 5 Quad Core" in item["about_items"]
+    assert "8 GB | 512 GB" in item["about_items"]
+    assert item["specifications"]["Processor Brand"] == "AMD"
+    assert item["specifications"]["Processor Name"] == "Ryzen 5 Quad Core"
+    assert item["rating"] == "4.3"
+    assert item["seller"] == "RetailNet"
+    assert "Highlights:" in item["description"]
+    assert "Specifications:" in item["description"]
+    assert "Processor Brand: AMD" in item["description"]
