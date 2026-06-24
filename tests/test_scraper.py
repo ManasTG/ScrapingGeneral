@@ -5,6 +5,11 @@ from app.scrapers.base import BaseScraper
 from app.scrapers.amazon import Scraper as AmazonScraper
 from app.scrapers.flipkart import Scraper as FlipkartScraper
 from app.scrapers.nykaa import Scraper as NykaaScraper
+from app.scrapers.purplle import Scraper as PurplleScraper
+from app.scrapers.tira import Scraper as TiraScraper
+from app.scrapers.kult import Scraper as KultScraper
+from app.scrapers.smytten import Scraper as SmyttenScraper
+from app.scrapers.zepto import Scraper as ZeptoScraper
 
 # Mock HTML sample for search listing
 SEARCH_PAGE_HTML = """
@@ -93,14 +98,29 @@ def test_scraper_url_and_selectors():
     amazon = AmazonScraper("job-1")
     flipkart = FlipkartScraper("job-2")
     nykaa = NykaaScraper("job-3")
+    purplle = PurplleScraper("job-4")
+    tira = TiraScraper("job-5")
+    kult = KultScraper("job-6")
+    smytten = SmyttenScraper("job-7")
+    zepto = ZeptoScraper("job-8")
     
     assert amazon.BASE_URL == "https://www.amazon.in"
     assert flipkart.BASE_URL == "https://www.flipkart.com"
     assert nykaa.BASE_URL == "https://www.nykaa.com"
+    assert purplle.BASE_URL == "https://www.purplle.com"
+    assert tira.BASE_URL == "https://www.tirabeauty.com"
+    assert kult.BASE_URL == "https://kult.app"
+    assert smytten.BASE_URL == "https://smytten.com"
+    assert zepto.BASE_URL == "https://www.zepto.com"
     
     assert "search_input" in amazon.SELECTORS
     assert "search_input" in flipkart.SELECTORS
     assert "search_input" in nykaa.SELECTORS
+    assert "search_input" in purplle.SELECTORS
+    assert "product_container" in tira.SELECTORS
+    assert "product_container" in kult.SELECTORS
+    assert "product_container" in smytten.SELECTORS
+    assert "product_container" in zepto.SELECTORS
 
 @patch("selenium.webdriver.Chrome")
 def test_scraper_extracts_listings(mock_chrome):
@@ -335,3 +355,314 @@ def test_nykaa_scraper_extracts_correct_fields(mock_chrome):
     assert "Standard cosmetic" in item["warranty"]
     assert "sunscreen with SPF 50" in item["description"]
     assert "sunscreen with SPF 50" in item["about_items"][0]
+
+
+PURPLLE_DETAIL_HTML = """
+<div class="product-info">
+    <h1>
+        <span class="font-bold block lh-normal">DermDoc</span>
+        <span class="block lh-normal">4% Niacinamide Sunscreen</span>
+    </h1>
+    <strong class="our-price">374</strong>
+    <p class="star-rating">4.3★</p>
+    <span class="text-rating">11576 Ratings</span>
+</div>
+<div class="inner-box">
+    <div class="mb-2 flex gap-3 items-center">
+        <span class="block text-sm font-semibold text-dark-secondary">Country of Origin</span>
+        <span class="block text-sm text-black-50">India</span>
+    </div>
+</div>
+<div class="accordion-collapse">
+    This sunscreen offers broad spectrum protection. It is enriched with niacinamide.
+    <ul>
+        <li>Broad Spectrum SPF 50</li>
+        <li>Prevents sun damage</li>
+    </ul>
+</div>
+"""
+
+@patch("selenium.webdriver.Chrome")
+def test_purplle_scraper_extracts_correct_fields(mock_chrome):
+    """Test that PurplleScraper post-processing extracts and cleans up rating, seller, warranty, specifications and description."""
+    driver_instance = MagicMock()
+    mock_chrome.return_value = driver_instance
+    
+    scraper = PurplleScraper("test-job-purplle-extract", headless=True)
+    
+    item = {
+        "title": "DermDoc 4% Niacinamide Sunscreen (11576 Ratings)",
+        "url": "https://www.purplle.com/wishcare-sunscreen/p/123",
+        "price": "₹374",
+        "rating": "N/A",
+        "reviews_count": "11576 Ratings",
+        "image_url": "img.jpg",
+        "specifications": {},
+        "_html": PURPLLE_DETAIL_HTML
+    }
+    
+    scraper._fix_title(item)
+    scraper._fix_rating(item)
+    scraper._fix_reviews_count(item)
+    scraper._fix_price(item)
+    scraper._fix_brand(item)
+    scraper._fix_seller(item)
+    scraper._fix_warranty(item)
+    scraper._fix_specifications_and_about(item)
+    
+    assert item["title"] == "DermDoc 4% Niacinamide Sunscreen (11576 Ratings)"
+    assert item["rating"] == "4.3"
+    assert item["reviews_count"] == "11576"
+    assert item["price"] == "₹374"
+    assert item["brand"] == "DermDoc"
+    assert item["seller"] == "Purplle Retailer"
+    assert "Standard cosmetic" in item["warranty"]
+    assert "Broad Spectrum SPF 50" in item["about_items"]
+    assert "broad spectrum protection" in item["description"]
+
+
+TIRA_DETAIL_HTML = """
+<div class="productBrand--_gf_p">Tira</div>
+<div class="productTitleContainer--XeDzj">
+    <h1>Tira Deep Cleansing Mini Wipes (8 Pcs)</h1>
+</div>
+<div class="productPrice--i0c7o">
+    <span class="currentAmount--BpSjQ">₹75</span>
+</div>
+<div class="tira-feedback-service-average-rating-section">3.9/5</div>
+<div class="tira-feedback-service-average-rating-total-reviews">215 Ratings</div>
+<img class="pdpImage--TIFEB" src="img.jpg" />
+<div class="soldByWrapper--ASa1S">Sold by : RELIANCE RETAIL LIMITED</div>
+<div class="pdpTable--fOX8q">
+    <div class="prop--etp3L">Country of Origin</div>
+    <div class="val--WS0aD">India</div>
+</div>
+<div class="accordionContent--Mioyy productDescription--aYlfh">
+    <div class="htmlContent--eDD85">
+        These wet wipes helps to remove dirt, excess oil and impurities.
+        They cleanse, purify and refresh skin.
+    </div>
+</div>
+"""
+
+@patch("selenium.webdriver.Chrome")
+def test_tira_scraper_extracts_correct_fields(mock_chrome):
+    """Test that TiraScraper post-processing extracts and cleans up rating, seller, warranty, specifications and description."""
+    driver_instance = MagicMock()
+    mock_chrome.return_value = driver_instance
+    
+    scraper = TiraScraper("test-job-tira-extract", headless=True)
+    
+    item = {
+        "title": "Tira Deep Cleansing Mini Wipes (8 Pcs) (215 Ratings)",
+        "url": "https://www.tirabeauty.com/product/123",
+        "price": "₹75",
+        "rating": "N/A",
+        "reviews_count": "215 Ratings",
+        "image_url": "img.jpg",
+        "specifications": {},
+        "_html": TIRA_DETAIL_HTML
+    }
+    
+    scraper._fix_title(item)
+    scraper._fix_rating(item)
+    scraper._fix_reviews_count(item)
+    scraper._fix_price(item)
+    scraper._fix_brand(item)
+    scraper._fix_seller(item)
+    scraper._fix_warranty(item)
+    scraper._fix_specifications_and_about(item)
+    
+    assert item["title"] == "Tira Deep Cleansing Mini Wipes (8 Pcs) (215 Ratings)"
+    assert item["rating"] == "3.9"
+    assert item["reviews_count"] == "215"
+    assert item["price"] == "₹75"
+    assert item["brand"] == "Tira"
+    assert item["seller"] == "RELIANCE RETAIL LIMITED"
+    assert "Standard cosmetic" in item["warranty"]
+    assert "These wet wipes helps to remove dirt" in item["about_items"][0]
+    assert "These wet wipes helps to remove dirt" in item["description"]
+
+
+KULT_DETAIL_HTML = """
+<div class="brand">Kult Brand</div>
+<h1 class="product-detail-title">Kult Matte Lipstick</h1>
+<div class="detail-price">₹450</div>
+<div class="detail-rating">4.2</div>
+<div class="detail-reviews-count">98 Ratings</div>
+<img class="main-image" src="lipstick.jpg" />
+<div class="sold-by">Sold by : KULT E-COMMERCE PRIVATE LIMITED</div>
+<table class="specs-table">
+    <tr>
+        <th>Country of Origin</th>
+        <td>India</td>
+    </tr>
+</table>
+<div class="product-description">
+    This is an amazing matte lipstick that lasts all day. Easy application and smooth finish.
+</div>
+"""
+
+@patch("selenium.webdriver.Chrome")
+def test_kult_scraper_extracts_correct_fields(mock_chrome):
+    """Test that KultScraper post-processing extracts and cleans up rating, seller, warranty, specifications and description."""
+    driver_instance = MagicMock()
+    mock_chrome.return_value = driver_instance
+    
+    scraper = KultScraper("test-job-kult-extract", headless=True)
+    
+    item = {
+        "title": "Kult Matte Lipstick (98 Ratings)",
+        "url": "https://kult.app/product/123",
+        "price": "₹450",
+        "rating": "N/A",
+        "reviews_count": "98 Ratings",
+        "image_url": "lipstick.jpg",
+        "specifications": {},
+        "_html": KULT_DETAIL_HTML
+    }
+    
+    scraper._fix_title(item)
+    scraper._fix_rating(item)
+    scraper._fix_reviews_count(item)
+    scraper._fix_price(item)
+    scraper._fix_brand(item)
+    scraper._fix_seller(item)
+    scraper._fix_warranty(item)
+    scraper._fix_specifications_and_about(item)
+    
+    assert item["title"] == "Kult Matte Lipstick (98 Ratings)"
+    assert item["rating"] == "4.2"
+    assert item["reviews_count"] == "98"
+    assert item["price"] == "₹450"
+    assert item["brand"] == "Kult Brand"
+    assert item["seller"] == "KULT E-COMMERCE PRIVATE LIMITED"
+    assert "Standard cosmetic" in item["warranty"]
+    assert "amazing matte lipstick" in item["about_items"][0]
+    assert "amazing matte lipstick" in item["description"]
+
+
+SMYTTEN_DETAIL_HTML = """
+<a class="css-yybu5f" href="/brand/dot-key">DOT & KEY</a>
+<h1 id="product-heading">Smytten Sunscreen SPF 50</h1>
+<div class="css-k3moiz">₹399</div>
+<div class="css-76wsh">4.3</div>
+<div class="css-qxtsom">
+    <div class="css-3nonjq">125 Ratings</div>
+    <div class="css-3nonjq">42 Reviews</div>
+</div>
+<div class="ant-tabs-tabpane-active">
+    <div>Country of Origin: India</div>
+    <div>Expiry Date: 2028-12-31</div>
+</div>
+<div class="product-description">
+    This is an amazing sunscreen with broad spectrum protection. It prevents sun damage.
+</div>
+"""
+
+@patch("selenium.webdriver.Chrome")
+def test_smytten_scraper_extracts_correct_fields(mock_chrome):
+    """Test that SmyttenScraper post-processing extracts and cleans up rating, seller, warranty, specifications and description."""
+    driver_instance = MagicMock()
+    mock_chrome.return_value = driver_instance
+    
+    scraper = SmyttenScraper("test-job-smytten-extract", headless=True)
+    
+    item = {
+        "title": "Smytten Sunscreen SPF 50 (125 Ratings)",
+        "url": "https://smytten.com/product/123",
+        "price": "₹399",
+        "rating": "N/A",
+        "reviews_count": "125 Ratings",
+        "image_url": "sunscreen.jpg",
+        "specifications": {},
+        "_html": SMYTTEN_DETAIL_HTML
+    }
+    
+    scraper._fix_title(item)
+    scraper._fix_rating(item)
+    scraper._fix_reviews_count(item)
+    scraper._fix_price(item)
+    scraper._fix_brand(item)
+    scraper._fix_seller(item)
+    scraper._fix_warranty(item)
+    scraper._fix_specifications_and_about(item)
+    
+    assert item["title"] == "Smytten Sunscreen SPF 50 (125 Ratings)"
+    assert item["rating"] == "4.3"
+    assert item["reviews_count"] == "125"
+    assert item["price"] == "₹399"
+    assert item["brand"] == "DOT & KEY"
+    assert item["seller"] == "Smytten"
+    assert "Standard personal care" in item["warranty"]
+    assert item["specifications"]["Country of Origin"] == "India"
+    assert item["specifications"]["Expiry Date"] == "2028-12-31"
+    assert "amazing sunscreen with broad" in item["about_items"][0]
+    assert "amazing sunscreen with broad" in item["description"]
+
+
+ZEPTO_DETAIL_HTML = """
+<div class="brand">Dot & Key</div>
+<h1 class="product-title">Zepto Sunscreen SPF 50</h1>
+<div class="price">₹399</div>
+<div class="rating">4.3</div>
+<div class="reviews-count">125 Ratings</div>
+<table class="specs-table">
+    <tr>
+        <th>Country of Origin</th>
+        <td>India</td>
+    </tr>
+    <tr>
+        <th>Expiry Date</th>
+        <td>2028-12-31</td>
+    </tr>
+</table>
+<div class="product-description">
+    This is an amazing sunscreen with broad spectrum protection. It prevents sun damage.
+</div>
+"""
+
+@patch("selenium.webdriver.Chrome")
+def test_zepto_scraper_extracts_correct_fields(mock_chrome):
+    """Test that ZeptoScraper post-processing extracts and cleans up rating, seller, warranty, specifications and description."""
+    driver_instance = MagicMock()
+    mock_chrome.return_value = driver_instance
+    
+    scraper = ZeptoScraper("test-job-zepto-extract", headless=True)
+    
+    item = {
+        "title": "Zepto Sunscreen SPF 50 (125 Ratings)",
+        "url": "https://www.zepto.com/pn/zepto-sunscreen-spf-50/pvid/123",
+        "price": "₹399",
+        "rating": "N/A",
+        "reviews_count": "125 Ratings",
+        "image_url": "sunscreen.jpg",
+        "specifications": {},
+        "_html": ZEPTO_DETAIL_HTML
+    }
+    
+    scraper._fix_title(item)
+    scraper._fix_rating(item)
+    scraper._fix_reviews_count(item)
+    scraper._fix_price(item)
+    scraper._fix_brand(item)
+    scraper._fix_seller(item)
+    scraper._fix_warranty(item)
+    scraper._fix_specifications_and_about(item)
+    
+    assert item["title"] == "Zepto Sunscreen SPF 50 (125 Ratings)"
+    assert item["rating"] == "4.3"
+    assert item["reviews_count"] == "125"
+    assert item["price"] == "₹399"
+    assert item["brand"] == "Dot & Key"
+    assert item["seller"] == "Zepto"
+    assert "Standard personal care" in item["warranty"]
+    assert item["specifications"]["Country of Origin"] == "India"
+    assert item["specifications"]["Expiry Date"] == "2028-12-31"
+    assert "amazing sunscreen with broad" in item["about_items"][0]
+    assert "amazing sunscreen with broad" in item["description"]
+
+
+
+
+

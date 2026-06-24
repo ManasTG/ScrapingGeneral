@@ -4,11 +4,11 @@ Amazon (Completed)
 Flipkart (Completed)
 BigBasket (Completed)
 Blinkit (Needs Location)
-Zepto (Needs Location)
+Zepto (Completed)
 Nykka   (Completed)
-Myntra 
-JioMart
-Purpile
-Tira
-Kult
-Smytten
+Myntra (Completed)
+JioMart (Completed)
+Purplle (Completed)
+Tira (Completed)
+Kult    (Website under maintannance)
+Smytten (Completed)
