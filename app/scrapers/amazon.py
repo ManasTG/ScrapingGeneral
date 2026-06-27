@@ -19,7 +19,8 @@ class Scraper(BaseScraper):
         "detail_brand": "a#bylineInfo, tr.brand td.value, #bylineInfo",
         "detail_specs_table": "table#productDetails_techSpec_section_1, div#prodDetails table, table.prodDetSectionEntry, table[class*='spec']",
         "detail_about": "div#feature-bullets ul li span.a-list-item, #feature-bullets ul li",
-        "detail_description": "div#productDescription p, div#productDescription span, #productDescription"
+        "detail_description": "div#productDescription p, div#productDescription span, #productDescription",
+        "detail_seller": "#sellerProfileTriggerId, #merchant-info a, div#merchant-info, [data-field='merchant-name'] a, [data-field='merchant-name']"
     }
 
     def scrape(self, search_query: str, limit: int) -> List[Dict[str, Any]]:

@@ -19,6 +19,8 @@ class ScrapeCancelledException(Exception):
         self.results = results or []
 
 class BaseScraper:
+    PAGE_LOAD_STRATEGY = "normal"
+
     def __init__(self, job_id: str, headless: bool = True, log_callback: Optional[Callable[[str], None]] = None, is_cancelled_callback: Optional[Callable[[], bool]] = None):
         self.job_id = job_id
         self.headless = headless
@@ -56,6 +58,7 @@ class BaseScraper:
     def init_driver(self) -> None:
         self.log("Initializing ChromeDriver...")
         chrome_options = Options()
+        chrome_options.page_load_strategy = getattr(self, "PAGE_LOAD_STRATEGY", "normal")
         
         if self.headless:
             chrome_options.add_argument("--headless=new")
@@ -111,6 +114,295 @@ class BaseScraper:
     def close_popups(self) -> None:
         """Hook to close popups after loading the home page. Overridden by subclasses."""
         pass
+
+    def _run_universal_heuristic(self, soup: BeautifulSoup, search_query: str) -> List[Dict[str, Any]]:
+        self._save_debug_screenshot("universal_search_heuristic")
+        all_links = soup.find_all("a", href=True)
+        candidates = []
+        
+        # Extract query terms for relevance
+        query_terms = [t.lower() for t in search_query.split()]
+        
+        for a in all_links:
+            href = a["href"]
+            # Skip common nav / non-product links
+            if any(x in href.lower() for x in ["login", "signin", "signup", "register", "cart", "checkout", "account", "settings", "help", "faq", "about", "contact", "privacy", "terms", "javascript:", "logout"]):
+                continue
+                
+            abs_url = urllib.parse.urljoin(self.driver.current_url, href)
+            text = a.get_text().strip()
+            
+            # Parent element context
+            parent = a.find_parent()
+            parent_text = parent.get_text() if parent else ""
+            
+            # Heuristic score
+            score = 0
+            
+            # 1. Contains search keywords
+            if any(t in text.lower() or t in href.lower() for t in query_terms):
+                score += 3
+                
+            # 2. Price nearby in parent text
+            price_match = re.search(r'(?:[\$₹£€]\s?\d+(?:,\d{3})*(?:\.\d{2})?|\d+\s?(?:USD|EUR|INR|Rs))', parent_text)
+            if price_match:
+                score += 3
+                
+            # 3. Contains typical product link patterns
+            if any(x in href.lower() for x in ["/product/", "/p/", "/item/", "/dp/", "/gp/", "/buy/", "/shop/"]):
+                score += 2
+                
+            # 4. Length of text looks like title
+            if 15 < len(text) < 120:
+                score += 1
+                
+            # 5. Image nearby
+            img_elem = None
+            if parent:
+                img_elem = parent.find("img") or (parent.find_parent() and parent.find_parent().find("img"))
+            if img_elem:
+                score += 2
+                
+            if score >= 3:
+                # Extract price if found
+                price = price_match.group(0) if price_match else None
+                
+                # Find image src
+                img_url = None
+                if img_elem:
+                    img_url = img_elem.get("src") or img_elem.get("data-src")
+                    img_url = urllib.parse.urljoin(self.driver.current_url, img_url) if img_url else None
+                    
+                candidates.append({
+                    "title": text or "Product Link",
+                    "url": abs_url,
+                    "price": price,
+                    "rating": "N/A",
+                    "reviews_count": "0",
+                    "image_url": img_url,
+                    "score": score
+                })
+        
+        # Sort candidates by score
+        candidates.sort(key=lambda x: x["score"], reverse=True)
+        
+        # Deduplicate based on URL
+        seen_urls = set()
+        listings = []
+        for c in candidates:
+            if c["url"] not in seen_urls:
+                seen_urls.add(c["url"])
+                listings.append(c)
+                
+        return listings
+
+    def _collect_listings_with_pagination(self, selectors: Dict[str, str], search_query: str, limit: int, initial_url: Optional[str] = None) -> List[Dict[str, Any]]:
+        if initial_url:
+            self.log(f"Navigating directly to search URL: {initial_url}...")
+            self.driver.get(initial_url)
+            time.sleep(3)
+            
+        listings = []
+        page_num = 1
+        max_pages = 5
+        last_url = self.driver.current_url
+        
+        while len(listings) < limit and page_num <= max_pages:
+            self.check_cancelled(listings)
+            
+            # Scroll down slowly to trigger lazy load elements
+            self.log(f"Scrolling page {page_num} to load items...")
+            self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight / 3);")
+            time.sleep(1.5)
+            self.driver.execute_script("window.scrollTo(0, (document.body.scrollHeight / 3) * 2);")
+            time.sleep(1.5)
+            self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+            time.sleep(1.5)
+            
+            self.check_cancelled(listings)
+            # Parse search results page
+            soup = BeautifulSoup(self.driver.page_source, "html.parser")
+            self.log(f"Extracting product listings from page {page_num}...")
+            
+            page_listings = []
+            containers = soup.select(selectors["product_container"])
+            self.log(f"Found {len(containers)} raw product containers on page {page_num}.")
+            
+            # Fallback heuristic if no containers are found with predefined selectors
+            if len(containers) == 0 or not any(container.select_one(selectors["title"]) for container in containers if container.select_one(selectors["title"])):
+                self.log(f"Predefined selectors yielded 0 valid products on page {page_num}. Running universal search heuristic...")
+                page_listings = self._run_universal_heuristic(soup, search_query)
+            else:
+                for container in containers:
+                    try:
+                        # Extract title and URL
+                        title_elem = container.select_one(selectors["title"])
+                        if not title_elem:
+                            if container.name == "a" and (container.has_attr("href") or container.has_attr("aria-label")):
+                                title_elem = container
+                            elif container.has_attr("aria-label"):
+                                title_elem = container
+                                
+                        if not title_elem:
+                            continue
+                        
+                        title = title_elem.get_text().strip()
+                        if not title and title_elem.has_attr("aria-label"):
+                            title = title_elem["aria-label"]
+                        
+                        link_elem = container.select_one(selectors["link"]) or title_elem
+                        if not link_elem or not link_elem.has_attr("href"):
+                            if container.name == "a" and container.has_attr("href"):
+                                link_elem = container
+                            else:
+                                link_elem = container.select_one("a[href]")
+                        
+                        if not link_elem or not link_elem.has_attr("href"):
+                            continue
+                            
+                        href = link_elem["href"]
+                        product_url = urllib.parse.urljoin(self.driver.current_url, href)
+                        
+                        # Prevent duplicates
+                        if any(l["url"] == product_url for l in page_listings):
+                            continue
+                        
+                        # Extract price
+                        price = None
+                        if "price" in selectors:
+                            price_elem = container.select_one(selectors["price"])
+                            price = price_elem.get_text().strip() if price_elem else None
+                        
+                        # Extract rating
+                        rating = None
+                        if "rating" in selectors:
+                            rating_elem = container.select_one(selectors["rating"])
+                            rating = rating_elem.get_text().strip() if rating_elem else None
+                        if not rating:
+                            # Heuristic for rating in text
+                            match = re.search(r'(\d\.\d)\s*(?:★|out of 5)', container.get_text())
+                            if match:
+                                rating = match.group(1)
+                        
+                        # Extract review count
+                        reviews_count = None
+                        if "reviews_count" in selectors:
+                            reviews_elem = container.select_one(selectors["reviews_count"])
+                            reviews_count = reviews_elem.get_text().strip() if reviews_elem else None
+                        if not reviews_count:
+                            # Heuristic for reviews count in text
+                            match = re.search(r'(\d[\d,]*)\s*(?:Ratings|Reviews|\()', container.get_text())
+                            if match:
+                                reviews_count = match.group(1)
+                        
+                        # Extract image URL
+                        image_url = None
+                        if "image" in selectors:
+                            image_elem = container.select_one(selectors["image"])
+                            if image_elem:
+                                for attr in ["src", "data-src", "data-original", "srcset"]:
+                                    val = image_elem.get(attr)
+                                    if val:
+                                        if attr == "srcset":
+                                            val = val.split(",")[0].strip().split(" ")[0]
+                                        if not val.startswith("data:image/"):
+                                            image_url = val
+                                            break
+                                if not image_url and image_elem.has_attr("src"):
+                                    image_url = image_elem["src"]
+                        
+                        brand = None
+                        if "brand" in selectors:
+                            brand_elem = container.select_one(selectors["brand"])
+                            brand = brand_elem.get_text().strip() if brand_elem else None
+                            
+                        page_listings.append({
+                            "title": title,
+                            "url": product_url,
+                            "price": price,
+                            "rating": rating,
+                            "reviews_count": reviews_count,
+                            "image_url": image_url,
+                            "brand": brand
+                        })
+                        
+                    except Exception:
+                        continue
+            
+            # Deduplicate across pages
+            new_added = 0
+            for item in page_listings:
+                if not any(x["url"] == item["url"] for x in listings):
+                    listings.append(item)
+                    new_added += 1
+            
+            self.log(f"Collected {new_added} new items from page {page_num}. Total unique collected: {len(listings)}")
+            
+            if len(listings) >= limit:
+                self.log(f"Target count {limit} reached or exceeded. Stopping search pagination.")
+                break
+                
+            # Attempt next page navigation
+            next_page_selectors = [
+                "a.s-pagination-next", "a.s-pagination-item--next", "a[class*='s-pagination-next']", # Amazon
+                "a._1LKq3z", "a[class*='_1LKq3z']", "a._3ANo7x", # Flipkart
+                "a.next", "a[class*='next']", "li[class*='next'] a", # JioMart/Nykaa/Myntra/etc
+                "a[aria-label*='Next']", "button[aria-label*='Next']",
+                "//a[contains(text(), 'Next') or contains(text(), 'next') or contains(text(), 'NEXT')]",
+                "//button[contains(text(), 'Next') or contains(text(), 'next') or contains(text(), 'NEXT')]",
+                "//span[contains(text(), 'Next') or contains(text(), 'next') or contains(text(), 'NEXT')]/parent::a",
+                "//span[contains(text(), 'Next') or contains(text(), 'next') or contains(text(), 'NEXT')]/parent::button"
+            ]
+            
+            found_next = False
+            for sel in next_page_selectors:
+                try:
+                    if sel.startswith("//"):
+                        next_page_btn = self.driver.find_element(By.XPATH, sel)
+                    else:
+                        next_page_btn = self.driver.find_element(By.CSS_SELECTOR, sel)
+                        
+                    if next_page_btn and next_page_btn.is_displayed() and next_page_btn.is_enabled():
+                        self.log(f"Found next page button via selector '{sel}'. Clicking...")
+                        self.driver.execute_script("arguments[0].click();", next_page_btn)
+                        found_next = True
+                        page_num += 1
+                        
+                        # Wait for URL to change or wait for new container elements
+                        try:
+                            WebDriverWait(self.driver, 5).until(
+                                EC.presence_of_element_located((By.CSS_SELECTOR, selectors["product_container"]))
+                            )
+                        except Exception:
+                            time.sleep(3)
+                            
+                        if self.driver.current_url == last_url:
+                            self.log("URL didn't change immediately, waiting extra 2s...")
+                            time.sleep(2)
+                            
+                        last_url = self.driver.current_url
+                        break
+                except Exception:
+                    continue
+            
+            if not found_next:
+                self.log("No next page button found. Attempting additional scroll for infinite scroll...")
+                self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+                time.sleep(2.5)
+                page_num += 1
+
+        # Score and limit results
+        keywords = [kw.lower() for kw in search_query.split()]
+        scored_listings = []
+        for item in listings:
+            score = sum(1 for kw in keywords if kw in item["title"].lower())
+            scored_listings.append((score, item))
+        
+        # Sort by relevance score descending
+        scored_listings.sort(key=lambda x: x[0], reverse=True)
+        candidate_listings = [item for _, item in scored_listings]
+        target_listings = candidate_listings[:limit]
+        return target_listings
 
     def _default_scrape_flow(self, base_url: str, selectors: Dict[str, str], search_query: str, limit: int) -> List[Dict[str, Any]]:
         results = []
@@ -198,205 +490,8 @@ class BaseScraper:
             self.log("Waiting for search results...")
             time.sleep(3)
             
-            # Scroll down slowly to trigger lazy load elements
-            self.check_cancelled(results)
-            self.log("Scrolling page to load items...")
-            self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight / 3);")
-            time.sleep(1.5)
-            self.driver.execute_script("window.scrollTo(0, (document.body.scrollHeight / 3) * 2);")
-            time.sleep(1.5)
-            self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-            time.sleep(1.5)
-            
-            self.check_cancelled(results)
-            # Parse search results page
-            soup = BeautifulSoup(self.driver.page_source, "html.parser")
-            
-            self.log("Extracting product listings from search results...")
-            containers = soup.select(selectors["product_container"])
-            self.log(f"Found {len(containers)} raw product containers.")
-            
-            listings = []
-            
-            # Fallback heuristic if no containers are found with predefined selectors
-            if len(containers) == 0 or not any(container.select_one(selectors["title"]) for container in containers if container.select_one(selectors["title"])):
-                self.log("Predefined selectors yielded 0 valid products. Initiating universal search heuristic...")
-                self._save_debug_screenshot("universal_search_heuristic")
-                
-                # Get all links
-                all_links = soup.find_all("a", href=True)
-                candidates = []
-                
-                # Extract query terms for relevance
-                query_terms = [t.lower() for t in search_query.split()]
-                
-                for a in all_links:
-                    href = a["href"]
-                    # Skip common nav / non-product links
-                    if any(x in href.lower() for x in ["login", "signin", "signup", "register", "cart", "checkout", "account", "settings", "help", "faq", "about", "contact", "privacy", "terms", "javascript:", "logout"]):
-                        continue
-                        
-                    abs_url = urllib.parse.urljoin(url, href)
-                    text = a.get_text().strip()
-                    
-                    # Parent element context
-                    parent = a.find_parent()
-                    parent_text = parent.get_text() if parent else ""
-                    
-                    # Heuristic score
-                    score = 0
-                    
-                    # 1. Contains search keywords
-                    if any(t in text.lower() or t in href.lower() for t in query_terms):
-                        score += 3
-                        
-                    # 2. Price nearby in parent text
-                    price_match = re.search(r'(?:[\$₹£€]\s?\d+(?:,\d{3})*(?:\.\d{2})?|\d+\s?(?:USD|EUR|INR|Rs))', parent_text)
-                    if price_match:
-                        score += 3
-                        
-                    # 3. Contains typical product link patterns
-                    if any(x in href.lower() for x in ["/product/", "/p/", "/item/", "/dp/", "/gp/", "/buy/", "/shop/"]):
-                        score += 2
-                        
-                    # 4. Length of text looks like title
-                    if 15 < len(text) < 120:
-                        score += 1
-                        
-                    # 5. Image nearby
-                    img_elem = None
-                    if parent:
-                        img_elem = parent.find("img") or (parent.find_parent() and parent.find_parent().find("img"))
-                    if img_elem:
-                        score += 2
-                        
-                    if score >= 3:
-                        # Extract price if found
-                        price = price_match.group(0) if price_match else None
-                        
-                        # Find image src
-                        img_url = None
-                        if img_elem:
-                            img_url = img_elem.get("src") or img_elem.get("data-src")
-                            img_url = urllib.parse.urljoin(url, img_url) if img_url else None
-                            
-                        candidates.append({
-                            "title": text or "Product Link",
-                            "url": abs_url,
-                            "price": price,
-                            "rating": "N/A",
-                            "reviews_count": "0",
-                            "image_url": img_url,
-                            "score": score
-                        })
-                
-                # Sort candidates by score
-                candidates.sort(key=lambda x: x["score"], reverse=True)
-                
-                # Deduplicate based on URL
-                seen_urls = set()
-                for c in candidates:
-                    if c["url"] not in seen_urls:
-                        seen_urls.add(c["url"])
-                        listings.append(c)
-                
-                self.log(f"Universal heuristic identified {len(listings)} product candidate links.")
-            else:
-                for container in containers:
-                    try:
-                        # Extract title and URL
-                        title_elem = container.select_one(selectors["title"])
-                        if not title_elem:
-                            if container.name == "a" and (container.has_attr("href") or container.has_attr("aria-label")):
-                                title_elem = container
-                            elif container.has_attr("aria-label"):
-                                title_elem = container
-                                
-                        if not title_elem:
-                            continue
-                        
-                        title = title_elem.get_text().strip()
-                        if not title and title_elem.has_attr("aria-label"):
-                            title = title_elem["aria-label"]
-                        
-                        link_elem = container.select_one(selectors["link"]) or title_elem
-                        if not link_elem or not link_elem.has_attr("href"):
-                            if container.name == "a" and container.has_attr("href"):
-                                link_elem = container
-                            else:
-                                link_elem = container.select_one("a[href]")
-                        
-                        if not link_elem or not link_elem.has_attr("href"):
-                            continue
-                            
-                        href = link_elem["href"]
-                        product_url = urllib.parse.urljoin(url, href)
-                        
-                        # Prevent duplicates
-                        if any(l["url"] == product_url for l in listings):
-                            continue
-                        
-                        # Extract price
-                        price_elem = container.select_one(selectors["price"])
-                        price = price_elem.get_text().strip() if price_elem else None
-                        
-                        # Extract rating
-                        rating_elem = container.select_one(selectors["rating"])
-                        rating = rating_elem.get_text().strip() if rating_elem else None
-                        if not rating:
-                            # Heuristic for rating in text
-                            match = re.search(r'(\d\.\d)\s*(?:★|out of 5)', container.get_text())
-                            if match:
-                                rating = match.group(1)
-                        
-                        # Extract review count
-                        reviews_elem = container.select_one(selectors["reviews_count"])
-                        reviews_count = reviews_elem.get_text().strip() if reviews_elem else None
-                        if not reviews_count:
-                            # Heuristic for reviews count in text
-                            match = re.search(r'(\d[\d,]*)\s*(?:Ratings|Reviews|\()', container.get_text())
-                            if match:
-                                reviews_count = match.group(1)
-                        
-                        # Extract image URL
-                        image_elem = container.select_one(selectors["image"])
-                        image_url = None
-                        if image_elem:
-                            for attr in ["src", "data-src", "data-original", "srcset"]:
-                                val = image_elem.get(attr)
-                                if val:
-                                    if attr == "srcset":
-                                        val = val.split(",")[0].strip().split(" ")[0]
-                                    if not val.startswith("data:image/"):
-                                        image_url = val
-                                        break
-                            if not image_url and image_elem.has_attr("src"):
-                                image_url = image_elem["src"]
-                        
-                        listings.append({
-                            "title": title,
-                            "url": product_url,
-                            "price": price,
-                            "rating": rating,
-                            "reviews_count": reviews_count,
-                            "image_url": image_url
-                        })
-                        
-                    except Exception:
-                        continue
-
-            # Select top results (matching the search query keyword)
-            keywords = [kw.lower() for kw in search_query.split()]
-            scored_listings = []
-            for item in listings:
-                score = sum(1 for kw in keywords if kw in item["title"].lower())
-                scored_listings.append((score, item))
-            
-            # Sort by relevance score descending
-            scored_listings.sort(key=lambda x: x[0], reverse=True)
-            candidate_listings = [item for _, item in scored_listings]
-            
-            target_listings = candidate_listings[:limit]
+            # Retrieve target listings using multi-page pagination / scrolling
+            target_listings = self._collect_listings_with_pagination(selectors, search_query, limit)
             self.log(f"Selected {len(target_listings)} listings matching search criteria for detail scraping.")
             
             if not target_listings:
@@ -605,9 +700,12 @@ class BaseScraper:
                             if seller_label:
                                 parent = seller_label.parent
                                 parent_text = parent.get_text().strip()
-                                match = re.search(r'(?:Seller|Sold by)\s*:\s*(.*)', parent_text, re.IGNORECASE)
+                                match = re.search(r'(?:Seller|Sold by)\s*:?\s*([^.\n\r]+)', parent_text, re.IGNORECASE)
                                 if match:
-                                    seller = match.group(1).strip()
+                                    seller_val = match.group(1).strip()
+                                    # Clean up trailing "and fulfilled by..." or similar common suffixes
+                                    seller_val = re.sub(r'(?i)\s+and\s+(?:fulfilled|ships|sent).*', '', seller_val)
+                                    seller = seller_val.strip()
                                 else:
                                     sibling = seller_label.find_next_sibling()
                                     if sibling:

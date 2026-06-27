@@ -10,5 +10,6 @@ Myntra (Completed)
 JioMart (Completed)
 Purplle (Completed)
 Tira (Completed)
-Kult    (Website under maintannance)
+Kult (Website under maintannance)
 Smytten (Completed)
+Alibaba

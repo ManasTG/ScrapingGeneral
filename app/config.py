@@ -2,7 +2,8 @@ import os
 
 # Database Config
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DATABASE_URL = f"sqlite:///{os.path.join(BASE_DIR, 'scraper.db')}"
+DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{os.path.join(BASE_DIR, 'scraper.db')}")
+
 
 # Selenium Config
 DEFAULT_HEADLESS = True

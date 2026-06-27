@@ -10,6 +10,7 @@ from app.scrapers.tira import Scraper as TiraScraper
 from app.scrapers.kult import Scraper as KultScraper
 from app.scrapers.smytten import Scraper as SmyttenScraper
 from app.scrapers.zepto import Scraper as ZeptoScraper
+from app.scrapers.alibaba import Scraper as AlibabaScraper
 
 # Mock HTML sample for search listing
 SEARCH_PAGE_HTML = """
@@ -103,6 +104,7 @@ def test_scraper_url_and_selectors():
     kult = KultScraper("job-6")
     smytten = SmyttenScraper("job-7")
     zepto = ZeptoScraper("job-8")
+    alibaba = AlibabaScraper("job-9")
     
     assert amazon.BASE_URL == "https://www.amazon.in"
     assert flipkart.BASE_URL == "https://www.flipkart.com"
@@ -112,6 +114,7 @@ def test_scraper_url_and_selectors():
     assert kult.BASE_URL == "https://kult.app"
     assert smytten.BASE_URL == "https://smytten.com"
     assert zepto.BASE_URL == "https://www.zepto.com"
+    assert alibaba.BASE_URL == "https://www.alibaba.com"
     
     assert "search_input" in amazon.SELECTORS
     assert "search_input" in flipkart.SELECTORS
@@ -121,6 +124,7 @@ def test_scraper_url_and_selectors():
     assert "product_container" in kult.SELECTORS
     assert "product_container" in smytten.SELECTORS
     assert "product_container" in zepto.SELECTORS
+    assert "product_container" in alibaba.SELECTORS
 
 @patch("selenium.webdriver.Chrome")
 def test_scraper_extracts_listings(mock_chrome):
@@ -661,6 +665,127 @@ def test_zepto_scraper_extracts_correct_fields(mock_chrome):
     assert item["specifications"]["Expiry Date"] == "2028-12-31"
     assert "amazing sunscreen with broad" in item["about_items"][0]
     assert "amazing sunscreen with broad" in item["description"]
+
+
+@patch("selenium.webdriver.Chrome")
+def test_scraper_collects_with_pagination(mock_chrome):
+    """Test that `_collect_listings_with_pagination` navigates to next pages and collects items up to the limit."""
+    driver_instance = MagicMock()
+    mock_chrome.return_value = driver_instance
+    
+    PAGE1_HTML = """
+    <div data-component-type="s-search-result" class="s-result-item">
+        <div>
+            <h2><a class="a-link-normal" href="/dp/ITEM1"><span class="a-size-medium">Laptop Item 1</span></a></h2>
+            <span class="a-price-whole">50,000</span>
+        </div>
+    </div>
+    <a class="s-pagination-next" href="/next-page-url">Next</a>
+    """
+    
+    PAGE2_HTML = """
+    <div data-component-type="s-search-result" class="s-result-item">
+        <div>
+            <h2><a class="a-link-normal" href="/dp/ITEM2"><span class="a-size-medium">Laptop Item 2</span></a></h2>
+            <span class="a-price-whole">60,000</span>
+        </div>
+    </div>
+    """
+    
+    driver_instance.page_source = PAGE1_HTML
+    driver_instance.current_url = "https://www.amazon.in/s?k=laptop"
+    
+    mock_next_button = MagicMock()
+    mock_next_button.is_displayed.return_value = True
+    mock_next_button.is_enabled.return_value = True
+    
+    def mock_find_element(by, value):
+        if "s-pagination-next" in value or "next" in value:
+            return mock_next_button
+        raise Exception("Element not found")
+        
+    driver_instance.find_element.side_effect = mock_find_element
+    
+    scraper = AmazonScraper("test-job-pagination", headless=True)
+    scraper.driver = driver_instance
+    
+    def mock_execute_script(script, *args):
+        if "click" in script:
+            driver_instance.page_source = PAGE2_HTML
+            driver_instance.current_url = "https://www.amazon.in/s?k=laptop&page=2"
+            return None
+        return None
+        
+    driver_instance.execute_script.side_effect = mock_execute_script
+    
+    results = scraper._collect_listings_with_pagination(
+        selectors=scraper.SELECTORS,
+        search_query="Laptop",
+        limit=2
+    )
+    
+    assert len(results) == 2
+    assert results[0]["title"] == "Laptop Item 1"
+    assert results[1]["title"] == "Laptop Item 2"
+
+
+ALIBABA_DETAIL_HTML = """
+<div class="product-title">
+    <h1>Alibaba Professional Laptop 15.6 Inch</h1>
+</div>
+<div class="price-number">$450.00 - $480.00</div>
+<span class="rating-value">4.8</span>
+<span class="review-count">(12 reviews)</span>
+<div class="attribute-layout">
+    <div class="attribute-item">Brand Name: OEM/Alibaba</div>
+    <div class="attribute-item">Country of Origin: China</div>
+    <div class="attribute-item">Warranty: 1 Year Manufacturer Warranty</div>
+</div>
+<div class="product-description">
+    High quality business laptop for office work. Equipped with high-speed SSD and reliable CPU.
+</div>
+<a class="company-name" href="/company_profile">Shenzhen Technology Co., Ltd.</a>
+"""
+
+
+@patch("selenium.webdriver.Chrome")
+def test_alibaba_scraper_extracts_correct_fields(mock_chrome):
+    """Test that AlibabaScraper post-processing extracts and cleans up rating, seller, warranty, specifications and description."""
+    driver_instance = MagicMock()
+    mock_chrome.return_value = driver_instance
+    
+    scraper = AlibabaScraper("test-job-alibaba-extract", headless=True)
+    
+    item = {
+        "title": "Alibaba Professional Laptop 15.6 Inch",
+        "url": "https://www.alibaba.com/product-detail/123.html",
+        "price": "$450.00 - $480.00",
+        "rating": "N/A",
+        "reviews_count": "N/A",
+        "image_url": "laptop.jpg",
+        "specifications": {},
+        "_html": ALIBABA_DETAIL_HTML
+    }
+    
+    scraper._fix_title(item)
+    scraper._fix_rating(item)
+    scraper._fix_reviews_count(item)
+    scraper._fix_price(item)
+    scraper._fix_brand(item)
+    scraper._fix_seller(item)
+    scraper._fix_warranty(item)
+    scraper._fix_specifications_and_about(item)
+    
+    assert item["title"] == "Alibaba Professional Laptop 15.6 Inch"
+    assert item["rating"] == "4.8"
+    assert item["reviews_count"] == "12"
+    assert item["price"] == "$450.00-$480.00"
+    assert item["brand"] == "OEM/Alibaba"
+    assert item["seller"] == "Shenzhen Technology Co., Ltd."
+    assert "1 Year Manufacturer Warranty" in item["warranty"]
+    assert item["specifications"]["Country of Origin"] == "China"
+    assert item["specifications"]["Brand Name"] == "OEM/Alibaba"
+    assert "High quality business laptop" in item["description"]
 
 
 

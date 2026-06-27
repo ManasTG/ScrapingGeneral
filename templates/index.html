@@ -3,371 +3,501 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Universal Product Scraper</title>
+    <title>Universal Product Scraper - SaaS</title>
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <!-- FontAwesome for some standard icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <!-- CSS Styleheet -->
+    <!-- CSS Stylesheet -->
     <link rel="stylesheet" href="/static/style.css">
+    <style>
+        .user-badge-premium {
+            background-color: var(--primary);
+            color: var(--on-primary);
+            font-size: 12px;
+            font-weight: 500;
+            padding: 4px 10px;
+            border-radius: 6px;
+            border: 1px solid var(--hairline-strong);
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+    </style>
 </head>
 <body>
-    <!-- Sticky Top Navigation -->
-    <header class="nav-bar">
-        <div class="nav-container">
-            <div class="nav-logo">
-                <svg width="24" height="24" viewBox="0 0 76 65" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M37.5274 0L75.0548 65H0L37.5274 0Z" fill="#171717"/>
+    <!-- 1. Authentication View -->
+    <div id="login-container" style="display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 24px; position: relative;">
+        <!-- Mesh Background -->
+        <div class="mesh-backdrop" style="position: fixed;"></div>
+        <div class="card-marketing" style="width: 100%; max-width: 420px; padding: 36px; z-index: 10; position: relative;">
+            <div style="text-align: center; margin-bottom: 28px;">
+                <svg width="40" height="40" viewBox="0 0 76 65" fill="none" xmlns="http://www.w3.org/2000/svg" style="margin-bottom: 12px;">
+                    <path d="M37.5274 0L75.0548 65H0L37.5274 0Z" fill="var(--primary)"/>
                 </svg>
-                <span>Universal Scraper</span>
-                <span class="badge-beta">Beta</span>
+                <h2 style="font-size: 26px; font-weight: 600; letter-spacing: -1.2px; color: var(--ink);">Sign in to SaaS Portal</h2>
+                <p style="color: var(--mute); font-size: 14px; margin-top: 6px;">Universal Product Scraping Engine</p>
             </div>
-            <nav class="nav-links">
-                <a href="#dashboard" class="nav-link active">Dashboard</a>
-                <a href="#history" class="nav-link">History</a>
-                <a href="https://github.com" target="_blank" class="nav-link">Docs</a>
-            </nav>
-            <div class="nav-actions">
-                <button class="nav-cta-ask-ai" id="btn-theme-toggle">
-                    <i class="fa-solid fa-circle-half-stroke"></i> System Mode
+            <form id="login-form" class="scrape-form" style="display: flex; flex-direction: column; gap: 18px;">
+                <div class="form-group">
+                    <label for="login-username" class="form-label">Username</label>
+                    <div class="input-wrapper">
+                        <i class="fa-solid fa-user input-icon"></i>
+                        <input type="text" id="login-username" class="form-input" placeholder="Enter username" required>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="login-password" class="form-label">Password</label>
+                    <div class="input-wrapper">
+                        <i class="fa-solid fa-lock input-icon"></i>
+                        <input type="password" id="login-password" class="form-input" placeholder="Enter password" required>
+                    </div>
+                </div>
+                <div id="login-error" style="color: var(--error); font-size: 13px; text-align: center; font-weight: 500; display: none;"></div>
+                <button type="submit" class="button-primary" style="margin-top: 8px;">
+                    <span>Authenticate Account</span>
+                    <i class="fa-solid fa-right-to-bracket"></i>
                 </button>
-            </div>
-        </div>
-    </header>
-
-    <!-- Mesh Gradient Backdrop Area -->
-    <div class="mesh-backdrop"></div>
-
-    <main class="page-container">
-        <!-- Hero Section -->
-        <section class="hero-band">
-            <div class="hero-eyebrow">AUTOMATED DATA HARVESTING</div>
-            <h1 class="hero-title">Scrape product details dynamically.</h1>
-            <p class="hero-lead">Enter any website, type search parameters, and crawl individual listings to gather deep specifications and customer ratings instantly.</p>
-        </section>
-
-        <!-- Dashboard Workspace Grid -->
-        <div class="workspace-grid" id="dashboard">
-            <!-- Left Side: Control panel -->
-            <div class="control-panel">
-                <div class="card-marketing">
-                    <h2 class="section-subtitle">Scraping Parameters</h2>
-                    <form id="scrape-form" class="scrape-form">
-                        <div class="form-group">
-                            <label for="input-website" class="form-label">Target Website</label>
-                            <div class="input-wrapper">
-                                <i class="fa-solid fa-globe input-icon"></i>
-                                <select id="input-website" class="form-input" required>
-                                    <option value="amazon">Amazon</option>
-                                    <option value="flipkart">Flipkart</option>
-                                    <option value="bigbasket">BigBasket</option>
-                                    <option value="blinkit" disabled>Blinkit (Soon)</option>
-                                    <option value="zepto">Zepto</option>
-                                    <option value="nykaa">Nykaa</option>
-                                    <option value="myntra">Myntra</option>
-                                    <option value="jiomart">JioMart</option>
-                                    <option value="purplle">Purplle</option>
-                                    <option value="tira">Tira</option>
-                                    <option value="kult">Kult</option>
-                                    <option value="smytten">Smytten</option>
-                                </select>
-                            </div>
-                        </div>
-
-                        <div class="form-group">
-                            <label for="input-search" class="form-label">Search Query</label>
-                            <div class="input-wrapper">
-                                <i class="fa-solid fa-magnifying-glass input-icon"></i>
-                                <input type="text" id="input-search" class="form-input" placeholder="e.g. Dell Laptops" required value="Dell Laptops">
-                            </div>
-                        </div>
-
-                        <div class="form-row">
-                            <div class="form-group half">
-                                <label for="input-limit" class="form-label">Items Limit</label>
-                                <input type="number" id="input-limit" class="form-input-sm" min="1" max="1000" required value="5">
-                            </div>
-                            <div class="form-group half">
-                                <label class="form-label">Browser Option</label>
-                                <label class="toggle-switch">
-                                    <input type="checkbox" id="input-headless" checked>
-                                    <span class="toggle-slider"></span>
-                                    <span class="toggle-label">Headless Mode</span>
-                                </label>
-                            </div>
-                        </div>
-
-                        <div class="scrape-buttons-container">
-                            <button type="submit" class="button-primary" id="btn-submit">
-                                <span>Execute Scraping Run</span>
-                                <i class="fa-solid fa-play"></i>
-                            </button>
-                            <button type="button" class="button-stop" id="btn-stop" style="display: none;">
-                                <span>Stop Scraping</span>
-                                <i class="fa-solid fa-stop"></i>
-                            </button>
-                        </div>
-                    </form>
-
-                    <div class="presets-section">
-                        <span class="caption-mono">QUICK PRESETS</span>
-                        <div class="presets-buttons">
-                            <button class="badge-secondary preset-btn" data-site="amazon" data-query="Dell Laptops" data-limit="5">
-                                Amazon Dell Laptops (5)
-                            </button>
-                            <button class="badge-secondary preset-btn" data-site="flipkart" data-query="Dell Laptops" data-limit="5">
-                                Flipkart Dell Laptops (5)
-                            </button>
-                            <button class="badge-secondary preset-btn" data-site="bigbasket" data-query="Sugar" data-limit="5">
-                                BigBasket Sugar (5)
-                            </button>
-                            <button class="badge-secondary preset-btn" data-site="nykaa" data-query="Sunscreen" data-limit="5">
-                                Nykaa Sunscreen (5)
-                            </button>
-                            <button class="badge-secondary preset-btn" data-site="myntra" data-query="T-Shirts" data-limit="5">
-                                Myntra T-Shirts (5)
-                            </button>
-                            <button class="badge-secondary preset-btn" data-site="jiomart" data-query="Sugar" data-limit="5">
-                                JioMart Sugar (5)
-                            </button>
-                            <button class="badge-secondary preset-btn" data-site="purplle" data-query="Sunscreen" data-limit="5">
-                                Purplle Sunscreen (5)
-                            </button>
-                            <button class="badge-secondary preset-btn" data-site="kult" data-query="Lipstick" data-limit="5">
-                                Kult Lipstick (5)
-                            </button>
-                            <button class="badge-secondary preset-btn" data-site="smytten" data-query="Sunscreen" data-limit="5">
-                                Smytten Sunscreen (5)
-                            </button>
-                            <button class="badge-secondary preset-btn" data-site="zepto" data-query="Mangoes" data-limit="5">
-                                Zepto Mangoes (5)
-                            </button>
-                        </div>
-                    </div>
-
-
-                    <div class="presets-section" style="border-top: 1px dashed var(--hairline); margin-top: 16px; padding-top: 16px;">
-                        <span class="caption-mono"><i class="fa-solid fa-bug"></i> DEBUG HELP</span>
-                        <p class="body-sm" style="margin-top: 8px; font-size: 12px; color: var(--mute);">
-                            If the scraper yields 0 results or fails:
-                        </p>
-                        <ul style="padding-left: 16px; margin-top: 6px; font-size: 12.5px; color: var(--mute); display: flex; flex-direction: column; gap: 4px;">
-                            <li>Try unchecking <strong>Headless Mode</strong> to solve CAPTCHAs interactively.</li>
-                            <li>Open <a href="/static/captcha_block.png" target="_blank" class="link-inline" style="font-size: 12.5px;">captcha_block.png</a> or <a href="/static/zero_search_results.png" target="_blank" class="link-inline" style="font-size: 12.5px;">zero_search_results.png</a> in a new tab to see the browser state.</li>
-                        </ul>
-                    </div>
-                </div>
-            </div>
-
-
-            <!-- Right Side: Terminal / Real-time Logs -->
-            <div class="terminal-panel">
-                <div class="card-marketing-large">
-                    <div class="terminal-header">
-                        <div class="terminal-dots">
-                            <span class="dot red"></span>
-                            <span class="dot yellow"></span>
-                            <span class="dot green"></span>
-                        </div>
-                        <span class="terminal-title">scraper_agent_runner.log</span>
-                        <div class="status-indicator" id="runner-status">
-                            <span class="status-pulse-idle"></span> Idle
-                        </div>
-                    </div>
-                    <div class="code-editor-mockup" id="terminal-logs">
-                        <div class="terminal-welcome">
-                            <span class="text-comment">// Universal Selenium Web Scraper CLI</span>
-                            <span class="text-comment">// Press 'Execute Scraping Run' to initiate the background automation task.</span>
-                            <span class="text-prompt">$ ready for commands</span>
-                        </div>
-                    </div>
-                    <div class="progress-bar-container">
-                        <div class="progress-bar-fill" id="progress-bar" style="width: 0%"></div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Scraping Results Section (Hidden until populated) -->
-        <section class="results-section" id="results-container" style="display: none;">
-            <div class="results-header">
-                <div>
-                    <h2 class="display-lg">Results.</h2>
-                    <p class="body-md">Top matching laptops scraped from target site details pages.</p>
-                </div>
-                <div class="results-actions">
-                    <button class="button-secondary-sm" id="btn-export-csv">
-                        <i class="fa-solid fa-file-csv"></i> Export CSV
-                    </button>
-                    <button class="button-secondary-sm" id="btn-export-json">
-                        <i class="fa-solid fa-file-code"></i> Export JSON
-                    </button>
-                </div>
-            </div>
-
-            <div class="card-marketing shadow-table">
-                <div class="table-responsive">
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>Thumbnail</th>
-                                <th>Brand</th>
-                                <th>Product Title</th>
-                                <th>Price</th>
-                                <th>Rating</th>
-                                <th>Reviews</th>
-                                <th>Action</th>
-                            </tr>
-                        </thead>
-                        <tbody id="results-table-body">
-                            <!-- Populated dynamically via JS -->
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </section>
-
-        <!-- Scraping History Section -->
-        <section class="history-section" id="history">
-            <h2 class="display-lg">Scraping History.</h2>
-            <p class="body-md">A history of past crawling job executions and statuses.</p>
-            
-            <div class="card-marketing shadow-table">
-                <div class="table-responsive">
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>Job ID</th>
-                                <th>Created At</th>
-                                <th>Website</th>
-                                <th>Search Query</th>
-                                <th>Limit</th>
-                                <th>Status</th>
-                                <th>Action</th>
-                            </tr>
-                        </thead>
-                        <tbody id="history-table-body">
-                            <!-- Populated dynamically via JS -->
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </section>
-    </main>
-
-    <!-- Product Details Drawer Modal (Vercel Style) -->
-    <div class="modal" id="details-modal">
-        <div class="modal-overlay"></div>
-        <div class="ex-modal-card">
-            <div class="modal-header">
-                <div>
-                    <span class="caption-mono uppercase" id="modal-product-brand">DELL</span>
-                    <h3 class="display-md" id="modal-product-title">Dell Inspiron 15</h3>
-                </div>
-                <button class="modal-close" id="btn-close-modal">
-                    <i class="fa-solid fa-xmark"></i>
-                </button>
-            </div>
-            
-            <div class="modal-body">
-                <div class="modal-split">
-                    <!-- Left column: Image and pricing -->
-                    <div class="modal-left">
-                        <div class="modal-image-container">
-                            <img src="" alt="Product Image" id="modal-product-image">
-                        </div>
-                        <div class="modal-price-box">
-                            <span class="price-label">Price Found</span>
-                            <span class="price-value" id="modal-product-price">₹54,990</span>
-                        </div>
-                        <div class="modal-ratings-box">
-                            <div class="rating-stars">
-                                <i class="fa-solid fa-star"></i>
-                                <span id="modal-product-rating">4.3 out of 5 stars</span>
-                            </div>
-                            <span class="reviews-count" id="modal-product-reviews">143 reviews</span>
-                        </div>
-                        <div class="modal-meta-box">
-                            <div class="meta-item">
-                                <i class="fa-solid fa-shop"></i>
-                                <span>Seller</span>
-                                <strong id="modal-product-seller">N/A</strong>
-                            </div>
-                            <div class="meta-item">
-                                <i class="fa-solid fa-shield-halved"></i>
-                                <span>Warranty</span>
-                                <strong id="modal-product-warranty">N/A</strong>
-                            </div>
-                        </div>
-                        <div class="modal-link-box">
-                            <a href="" target="_blank" id="modal-product-link" class="link-inline">
-                                View Original Page <i class="fa-solid fa-arrow-up-right-from-square"></i>
-                            </a>
-                        </div>
-                    </div>
-
-                    <!-- Right column: Specs and bullet points -->
-                    <div class="modal-right">
-                        <div class="specs-section">
-                            <h4 class="specs-heading"><i class="fa-solid fa-list-check"></i> Technical Specifications</h4>
-                            <div class="specs-grid" id="modal-product-specs">
-                                <!-- Populated dynamically -->
-                            </div>
-                        </div>
-
-                        <div class="bullet-section">
-                            <h4 class="specs-heading"><i class="fa-solid fa-circle-info"></i> Highlights</h4>
-                            <ul class="bullet-list" id="modal-product-about">
-                                <!-- Populated dynamically -->
-                            </ul>
-                        </div>
-                        
-                        <div class="desc-section" id="modal-desc-container">
-                            <h4 class="specs-heading"><i class="fa-solid fa-align-left"></i> Description</h4>
-                            <p class="desc-text" id="modal-product-desc"></p>
-                        </div>
-
-                        <div class="reviews-section" id="modal-reviews-container">
-                            <h4 class="specs-heading"><i class="fa-solid fa-comments"></i> Customer Reviews</h4>
-                            <div class="reviews-list" id="modal-product-reviews-list">
-                                <!-- Populated dynamically -->
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
+            </form>
         </div>
     </div>
 
-    <!-- Footer -->
-    <footer class="footer">
-        <div class="footer-grid">
-            <div>
-                <span class="caption-mono uppercase">PROJECT</span>
-                <p class="body-sm">Universal Dynamic Scraping Framework. Formulated following specific agent skills guidelines.</p>
+    <!-- 2. Main SaaS Application View -->
+    <div id="app-container" style="display: none;">
+        <!-- Sticky Top Navigation -->
+        <header class="nav-bar">
+            <div class="nav-container">
+                <div class="nav-logo">
+                    <svg width="24" height="24" viewBox="0 0 76 65" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M37.5274 0L75.0548 65H0L37.5274 0Z" fill="#171717"/>
+                    </svg>
+                    <span>Universal Scraper</span>
+                    <span class="badge-beta">SaaS</span>
+                </div>
+                <nav class="nav-links">
+                    <a href="#dashboard" class="nav-link active" id="nav-dashboard">Dashboard</a>
+                    <a href="#history" class="nav-link" id="nav-history">History</a>
+                    <a href="#administration" class="nav-link" id="nav-administration" style="display: none;">SaaS Admin</a>
+                </nav>
+                <div class="nav-actions" style="gap: 12px;">
+                    <div class="user-badge-premium" id="nav-user-info" style="display: none;">
+                        <i class="fa-solid fa-circle-user"></i>
+                        <span id="nav-username">username</span>
+                        <span style="opacity: 0.5;">|</span>
+                        <span id="nav-company-name" style="font-weight: 600;">company</span>
+                    </div>
+                    <button class="nav-cta-ask-ai" id="btn-theme-toggle">
+                        <i class="fa-solid fa-circle-half-stroke"></i> Mode
+                    </button>
+                    <button class="nav-cta-ask-ai" id="btn-logout" style="border-color: var(--error); color: var(--error); font-weight: 500;">
+                        <i class="fa-solid fa-right-from-bracket"></i> Logout
+                    </button>
+                </div>
             </div>
-            <div>
-                <span class="caption-mono uppercase">COMPLIANCE</span>
-                <p class="body-sm">Engineered with custom browser profiles, explicit timeouts, and anti-bot mitigation protocols.</p>
+        </header>
+
+        <!-- Mesh Gradient Backdrop Area -->
+        <div class="mesh-backdrop"></div>
+
+        <main class="page-container">
+            <!-- Hero Section -->
+            <section class="hero-band" id="hero-section">
+                <div class="hero-eyebrow" id="hero-company-badge">AUTOMATED DATA HARVESTING</div>
+                <h1 class="hero-title" id="hero-title-text">Scrape product details dynamically.</h1>
+                <p class="hero-lead">Enter any website, type search parameters, and crawl individual listings to gather deep specifications and customer ratings instantly.</p>
+            </section>
+
+            <!-- Dashboard Workspace Grid (Scraper Panel) -->
+            <div class="workspace-grid" id="dashboard-section">
+                <!-- Left Side: Control panel -->
+                <div class="control-panel">
+                    <div class="card-marketing">
+                        <h2 class="section-subtitle">Scraping Parameters</h2>
+                        <form id="scrape-form" class="scrape-form">
+                            <div class="form-group">
+                                <label for="input-website" class="form-label">Target Website</label>
+                                <div class="input-wrapper">
+                                    <i class="fa-solid fa-globe input-icon"></i>
+                                    <select id="input-website" class="form-input" required>
+                                        <option value="amazon">Amazon</option>
+                                        <option value="flipkart">Flipkart</option>
+                                        <option value="bigbasket">BigBasket</option>
+                                        <option value="blinkit" disabled>Blinkit (Soon)</option>
+                                        <option value="zepto">Zepto</option>
+                                        <option value="nykaa">Nykaa</option>
+                                        <option value="myntra">Myntra</option>
+                                        <option value="jiomart">JioMart</option>
+                                        <option value="purplle">Purplle</option>
+                                        <option value="tira">Tira</option>
+                                        <option value="kult">Kult</option>
+                                        <option value="smytten">Smytten</option>
+                                        <option value="alibaba">Alibaba</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="input-search" class="form-label">Search Query</label>
+                                <div class="input-wrapper">
+                                    <i class="fa-solid fa-magnifying-glass input-icon"></i>
+                                    <input type="text" id="input-search" class="form-input" placeholder="e.g. Dell Laptops" required value="Dell Laptops">
+                                </div>
+                            </div>
+
+                            <div class="form-row">
+                                <div class="form-group half">
+                                    <label for="input-limit" class="form-label">Items Limit</label>
+                                    <input type="number" id="input-limit" class="form-input-sm" min="1" max="1000" required value="5">
+                                </div>
+                                <div class="form-group half">
+                                    <label class="form-label">Browser Option</label>
+                                    <label class="toggle-switch">
+                                        <input type="checkbox" id="input-headless" checked>
+                                        <span class="toggle-slider"></span>
+                                        <span class="toggle-label">Headless Mode</span>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div class="scrape-buttons-container">
+                                <button type="submit" class="button-primary" id="btn-submit">
+                                    <span>Execute Scraping Run</span>
+                                    <i class="fa-solid fa-play"></i>
+                                </button>
+                                <button type="button" class="button-stop" id="btn-stop" style="display: none;">
+                                    <span>Stop Scraping</span>
+                                    <i class="fa-solid fa-stop"></i>
+                                </button>
+                            </div>
+                        </form>
+
+                        <div class="presets-section">
+                            <span class="caption-mono">QUICK PRESETS</span>
+                            <div class="presets-buttons">
+                                <button class="badge-secondary preset-btn" data-site="amazon" data-query="Dell Laptops" data-limit="5">
+                                    Amazon Dell Laptops (5)
+                                </button>
+                                <button class="badge-secondary preset-btn" data-site="flipkart" data-query="Dell Laptops" data-limit="5">
+                                    Flipkart Dell Laptops (5)
+                                </button>
+                                <button class="badge-secondary preset-btn" data-site="bigbasket" data-query="Sugar" data-limit="5">
+                                    BigBasket Sugar (5)
+                                </button>
+                                <button class="badge-secondary preset-btn" data-site="nykaa" data-query="Sunscreen" data-limit="5">
+                                    Nykaa Sunscreen (5)
+                                </button>
+                                <button class="badge-secondary preset-btn" data-site="myntra" data-query="T-Shirts" data-limit="5">
+                                    Myntra T-Shirts (5)
+                                </button>
+                                <button class="badge-secondary preset-btn" data-site="jiomart" data-query="Sugar" data-limit="5">
+                                    JioMart Sugar (5)
+                                </button>
+                                <button class="badge-secondary preset-btn" data-site="purplle" data-query="Sunscreen" data-limit="5">
+                                    Purplle Sunscreen (5)
+                                </button>
+                                <button class="badge-secondary preset-btn" data-site="kult" data-query="Lipstick" data-limit="5">
+                                    Kult Lipstick (5)
+                                </button>
+                                <button class="badge-secondary preset-btn" data-site="smytten" data-query="Sunscreen" data-limit="5">
+                                    Smytten Sunscreen (5)
+                                </button>
+                                <button class="badge-secondary preset-btn" data-site="zepto" data-query="Mangoes" data-limit="5">
+                                    Zepto Mangoes (5)
+                                </button>
+                                <button class="badge-secondary preset-btn" data-site="alibaba" data-query="Laptops" data-limit="5">
+                                    Alibaba Laptops (5)
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="presets-section" style="border-top: 1px dashed var(--hairline); margin-top: 16px; padding-top: 16px;">
+                            <span class="caption-mono"><i class="fa-solid fa-bug"></i> DEBUG HELP</span>
+                            <p class="body-sm" style="margin-top: 8px; font-size: 12px; color: var(--mute);">
+                                If the scraper yields 0 results or fails:
+                            </p>
+                            <ul style="padding-left: 16px; margin-top: 6px; font-size: 12.5px; color: var(--mute); display: flex; flex-direction: column; gap: 4px;">
+                                <li>Try unchecking <strong>Headless Mode</strong> to solve CAPTCHAs interactively.</li>
+                                <li>Open <a href="/static/captcha_block.png" target="_blank" class="link-inline" style="font-size: 12.5px;">captcha_block.png</a> or <a href="/static/zero_search_results.png" target="_blank" class="link-inline" style="font-size: 12.5px;">zero_search_results.png</a> in a new tab to see the browser state.</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right Side: Terminal / Real-time Logs -->
+                <div class="terminal-panel">
+                    <div class="card-marketing-large">
+                        <div class="terminal-header">
+                            <div class="terminal-dots">
+                                <span class="dot red"></span>
+                                <span class="dot yellow"></span>
+                                <span class="dot green"></span>
+                            </div>
+                            <span class="terminal-title">scraper_agent_runner.log</span>
+                            <div class="status-indicator" id="runner-status">
+                                <span class="status-pulse-idle"></span> Idle
+                            </div>
+                        </div>
+                        <div class="code-editor-mockup" id="terminal-logs">
+                            <div class="terminal-welcome">
+                                <span class="text-comment">// Universal Selenium Web Scraper CLI</span>
+                                <span class="text-comment">// Press 'Execute Scraping Run' to initiate the background automation task.</span>
+                                <span class="text-prompt">$ ready for commands</span>
+                            </div>
+                        </div>
+                        <div class="progress-bar-container">
+                            <div class="progress-bar-fill" id="progress-bar" style="width: 0%"></div>
+                        </div>
+                    </div>
+                </div>
             </div>
-            <div>
-                <span class="caption-mono uppercase">EXPORT</span>
-                <p class="body-sm">Exportable to compliant CSV and JSON data schemas mapped directly from scraped tables.</p>
+
+            <!-- SaaS Administration View (SuperAdmin Control Center) -->
+            <div id="administration-section" style="display: none; margin-bottom: 48px;">
+                <div class="workspace-grid">
+                    <!-- Left: Provision New Admin -->
+                    <div class="control-panel">
+                        <div class="card-marketing">
+                            <h2 class="section-subtitle">Provision New Admin</h2>
+                            <form id="create-company-form" class="scrape-form">
+                                <div class="form-group">
+                                    <label for="new-company-name" class="form-label">Company Name</label>
+                                    <div class="input-wrapper">
+                                        <i class="fa-solid fa-building input-icon"></i>
+                                        <input type="text" id="new-company-name" class="form-input" placeholder="e.g. Acme Corp" required>
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label for="new-username" class="form-label">Admin Username</label>
+                                    <div class="input-wrapper">
+                                        <i class="fa-solid fa-user-plus input-icon"></i>
+                                        <input type="text" id="new-username" class="form-input" placeholder="e.g. acme_admin" required>
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label for="new-password" class="form-label">Password</label>
+                                    <div class="input-wrapper">
+                                        <i class="fa-solid fa-key input-icon"></i>
+                                        <input type="password" id="new-password" class="form-input" placeholder="Minimum 6 characters" required>
+                                    </div>
+                                </div>
+                                <div id="create-company-error" style="color: var(--error); font-size: 13px; font-weight: 500; text-align: center; display: none;"></div>
+                                <div id="create-company-success" style="color: var(--link); font-size: 13px; font-weight: 500; text-align: center; display: none;"></div>
+                                <button type="submit" class="button-primary" style="margin-top: 8px;">
+                                    <span>Provision Access</span>
+                                    <i class="fa-solid fa-plus"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+
+                    <!-- Right: Active SaaS Tenants -->
+                    <div class="terminal-panel">
+                        <div class="card-marketing-large" style="padding: 24px;">
+                            <h2 class="section-subtitle">Active SaaS Tenancies</h2>
+                            <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                                <table class="data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Company</th>
+                                            <th>Admin Username</th>
+                                            <th>Database File</th>
+                                            <th>Created At</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="companies-table-body">
+                                        <!-- Populated dynamically via JS -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
-            <div>
-                <span class="caption-mono uppercase">INTERFACE</span>
-                <p class="body-sm">Rendered via Vercel design language primitives: stacked light, thin canvas-soft layout.</p>
+
+            <!-- Scraping Results Section (Hidden until populated) -->
+            <section class="results-section" id="results-container" style="display: none;">
+                <div class="results-header">
+                    <div>
+                        <h2 class="display-lg">Results.</h2>
+                        <p class="body-md" id="results-subtitle">Top matching items scraped from target site details pages.</p>
+                    </div>
+                    <div class="results-actions">
+                        <button class="button-secondary-sm" id="btn-export-csv">
+                            <i class="fa-solid fa-file-csv"></i> Export CSV
+                        </button>
+                        <button class="button-secondary-sm" id="btn-export-json">
+                            <i class="fa-solid fa-file-code"></i> Export JSON
+                        </button>
+                    </div>
+                </div>
+
+                <div class="card-marketing shadow-table">
+                    <div class="table-responsive">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Thumbnail</th>
+                                    <th class="col-company" style="display: none;">Company</th>
+                                    <th>Brand</th>
+                                    <th>Product Title</th>
+                                    <th>Price</th>
+                                    <th>Rating</th>
+                                    <th>Reviews</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="results-table-body">
+                                <!-- Populated dynamically via JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Scraping History Section -->
+            <section class="history-section" id="history">
+                <h2 class="display-lg">Scraping History.</h2>
+                <p class="body-md">A history of past crawling job executions and statuses.</p>
+                
+                <div class="card-marketing shadow-table">
+                    <div class="table-responsive">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Job ID</th>
+                                    <th>Created At</th>
+                                    <th class="col-company" style="display: none;">Company</th>
+                                    <th>Website</th>
+                                    <th>Search Query</th>
+                                    <th>Limit</th>
+                                    <th>Status</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="history-table-body">
+                                <!-- Populated dynamically via JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Product Details Drawer Modal (Vercel Style) -->
+        <div class="modal" id="details-modal">
+            <div class="modal-overlay"></div>
+            <div class="ex-modal-card">
+                <div class="modal-header">
+                    <div>
+                        <span class="caption-mono uppercase" id="modal-product-brand">DELL</span>
+                        <h3 class="display-md" id="modal-product-title">Dell Inspiron 15</h3>
+                    </div>
+                    <button class="modal-close" id="btn-close-modal">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+                
+                <div class="modal-body">
+                    <div class="modal-split">
+                        <!-- Left column: Image and pricing -->
+                        <div class="modal-left">
+                            <div class="modal-image-container">
+                                <img src="" alt="Product Image" id="modal-product-image">
+                            </div>
+                            <div class="modal-price-box">
+                                <span class="price-label">Price Found</span>
+                                <span class="price-value" id="modal-product-price">₹54,990</span>
+                            </div>
+                            <div class="modal-ratings-box">
+                                <div class="rating-stars">
+                                    <i class="fa-solid fa-star"></i>
+                                    <span id="modal-product-rating">4.3 out of 5 stars</span>
+                                </div>
+                                <span class="reviews-count" id="modal-product-reviews">143 reviews</span>
+                            </div>
+                            <div class="modal-meta-box">
+                                <div class="meta-item">
+                                    <i class="fa-solid fa-shop"></i>
+                                    <span>Seller</span>
+                                    <strong id="modal-product-seller">N/A</strong>
+                                </div>
+                                <div class="meta-item">
+                                    <i class="fa-solid fa-shield-halved"></i>
+                                    <span>Warranty</span>
+                                    <strong id="modal-product-warranty">N/A</strong>
+                                </div>
+                            </div>
+                            <div class="modal-link-box">
+                                <a href="" target="_blank" id="modal-product-link" class="link-inline">
+                                    View Original Page <i class="fa-solid fa-arrow-up-right-from-square"></i>
+                                </a>
+                            </div>
+                        </div>
+
+                        <!-- Right column: Specs and bullet points -->
+                        <div class="modal-right">
+                            <div class="specs-section">
+                                <h4 class="specs-heading"><i class="fa-solid fa-list-check"></i> Technical Specifications</h4>
+                                <div class="specs-grid" id="modal-product-specs">
+                                    <!-- Populated dynamically -->
+                                </div>
+                            </div>
+
+                            <div class="bullet-section">
+                                <h4 class="specs-heading"><i class="fa-solid fa-circle-info"></i> Highlights</h4>
+                                <ul class="bullet-list" id="modal-product-about">
+                                    <!-- Populated dynamically -->
+                                </ul>
+                            </div>
+                            
+                            <div class="desc-section" id="modal-desc-container">
+                                <h4 class="specs-heading"><i class="fa-solid fa-align-left"></i> Description</h4>
+                                <p class="desc-text" id="modal-product-desc"></p>
+                            </div>
+
+                            <div class="reviews-section" id="modal-reviews-container">
+                                <h4 class="specs-heading"><i class="fa-solid fa-comments"></i> Customer Reviews</h4>
+                                <div class="reviews-list" id="modal-product-reviews-list">
+                                    <!-- Populated dynamically -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
-        <div class="footer-bottom">
-            <span>&copy; 2026 Developer Cloud Platform Inc. All rights reserved.</span>
-            <span>Ref: Vercel-Design-Analysis v0.1</span>
-        </div>
-    </footer>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <div class="footer-grid">
+                <div>
+                    <span class="caption-mono uppercase">PROJECT</span>
+                    <p class="body-sm">Universal Dynamic Scraping Framework. Formulated following specific agent skills guidelines.</p>
+                </div>
+                <div>
+                    <span class="caption-mono uppercase">COMPLIANCE</span>
+                    <p class="body-sm">Engineered with custom browser profiles, explicit timeouts, and anti-bot mitigation protocols.</p>
+                </div>
+                <div>
+                    <span class="caption-mono uppercase">EXPORT</span>
+                    <p class="body-sm">Exportable to compliant CSV and JSON data schemas mapped directly from scraped tables.</p>
+                </div>
+                <div>
+                    <span class="caption-mono uppercase">INTERFACE</span>
+                    <p class="body-sm">Rendered via Vercel design language primitives: stacked light, thin canvas-soft layout.</p>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <span>&copy; 2026 Developer Cloud Platform Inc. All rights reserved.</span>
+                <span>Ref: Vercel-Design-Analysis v0.1</span>
+            </div>
+        </footer>
+    </div>
 
     <!-- App Frontend JS -->
     <script src="/static/app.js"></script>
 </body>
 </html>
+

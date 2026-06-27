@@ -1,4 +1,5 @@
 // State Management
+let currentUser = null;
 let activeJobId = null;
 let activeResults = [];
 
@@ -16,6 +17,30 @@ const runnerStatus = document.getElementById("runner-status");
 const resultsContainer = document.getElementById("results-container");
 const resultsTableBody = document.getElementById("results-table-body");
 const historyTableBody = document.getElementById("history-table-body");
+
+// SaaS UI elements
+const loginContainer = document.getElementById("login-container");
+const loginForm = document.getElementById("login-form");
+const loginError = document.getElementById("login-error");
+const appContainer = document.getElementById("app-container");
+const btnLogout = document.getElementById("btn-logout");
+const navUserInfo = document.getElementById("nav-user-info");
+const navUsername = document.getElementById("nav-username");
+const navCompanyName = document.getElementById("nav-company-name");
+
+const navDashboard = document.getElementById("nav-dashboard");
+const navHistory = document.getElementById("nav-history");
+const navAdministration = document.getElementById("nav-administration");
+
+const dashboardSection = document.getElementById("dashboard-section");
+const administrationSection = document.getElementById("administration-section");
+const heroSection = document.getElementById("hero-section");
+const historySection = document.getElementById("history");
+
+const createCompanyForm = document.getElementById("create-company-form");
+const createCompanyError = document.getElementById("create-company-error");
+const createCompanySuccess = document.getElementById("create-company-success");
+const companiesTableBody = document.getElementById("companies-table-body");
 
 // Modal Elements
 const detailsModal = document.getElementById("details-modal");
@@ -39,7 +64,7 @@ const btnExportJson = document.getElementById("btn-export-json");
 
 // Init application
 document.addEventListener("DOMContentLoaded", () => {
-    loadHistory();
+    checkAuth();
     setupTheme();
     setupEventListeners();
 });
@@ -48,6 +73,13 @@ document.addEventListener("DOMContentLoaded", () => {
 function setupEventListeners() {
     scrapeForm.addEventListener("submit", handleFormSubmit);
     btnStop.addEventListener("click", handleStopClick);
+    
+    // Auth Forms
+    loginForm.addEventListener("submit", handleLoginFormSubmit);
+    btnLogout.addEventListener("click", handleLogoutClick);
+    
+    // SuperAdmin Forms
+    createCompanyForm.addEventListener("submit", handleCreateCompanySubmit);
     
     // Presets
     document.querySelectorAll(".preset-btn").forEach(btn => {
@@ -79,13 +111,221 @@ function setupEventListeners() {
             window.location.href = `/api/export/${activeJobId}/json`;
         }
     });
+    
+    // Tabs Navigation
+    navDashboard.addEventListener("click", (e) => {
+        e.preventDefault();
+        showTab("dashboard");
+    });
+    
+    navHistory.addEventListener("click", (e) => {
+        e.preventDefault();
+        showTab("dashboard");
+        setTimeout(() => {
+            historySection.scrollIntoView({ behavior: "smooth" });
+        }, 100);
+    });
+    
+    navAdministration.addEventListener("click", (e) => {
+        e.preventDefault();
+        showTab("admin");
+    });
+}
+
+// Navigation Tab switcher
+function showTab(tab) {
+    if (tab === "dashboard") {
+        navDashboard.classList.add("active");
+        navHistory.classList.remove("active");
+        navAdministration.classList.remove("active");
+        
+        dashboardSection.style.display = "grid";
+        heroSection.style.display = "block";
+        administrationSection.style.display = "none";
+        historySection.style.display = "block";
+    } else if (tab === "admin") {
+        navAdministration.classList.add("active");
+        navDashboard.classList.remove("active");
+        navHistory.classList.remove("active");
+        
+        dashboardSection.style.display = "none";
+        heroSection.style.display = "none";
+        administrationSection.style.display = "block";
+        historySection.style.display = "none";
+        resultsContainer.style.display = "none";
+        
+        loadCompanies();
+    }
+}
+
+// Check Authentication Status
+async function checkAuth() {
+    try {
+        const res = await fetch("/api/me");
+        if (res.status === 401) {
+            showLoginView();
+            return;
+        }
+        if (!res.ok) throw new Error("Auth status validation failed");
+        
+        currentUser = await res.json();
+        setupUserDashboard(currentUser);
+    } catch (err) {
+        showLoginView();
+    }
+}
+
+// Show Login overlay view
+function showLoginView() {
+    currentUser = null;
+    loginContainer.style.display = "flex";
+    appContainer.style.display = "none";
+    loginError.style.display = "none";
+    loginError.textContent = "";
+}
+
+// Show Dashboard view
+function setupUserDashboard(user) {
+    loginContainer.style.display = "none";
+    appContainer.style.display = "block";
+    
+    // Set user metadata badges
+    navUsername.textContent = user.username;
+    navCompanyName.textContent = user.company_name || (user.role === "superadmin" ? "SaaS Root" : "Tenancy");
+    navUserInfo.style.display = "inline-flex";
+    
+    // SuperAdmin view controls
+    if (user.role === "superadmin") {
+        navAdministration.style.display = "inline-block";
+        document.querySelectorAll(".col-company").forEach(el => el.style.display = "table-cell");
+        document.getElementById("hero-company-badge").textContent = "SAAS CENTRAL PLATFORM";
+        document.getElementById("hero-title-text").textContent = "SuperAdmin Data Control Center";
+        document.getElementById("results-subtitle").textContent = "Mirrored product results from all companies.";
+    } else {
+        navAdministration.style.display = "none";
+        document.querySelectorAll(".col-company").forEach(el => el.style.display = "none");
+        document.getElementById("hero-company-badge").textContent = `TENANT CONSOLE - ${user.company_name.toUpperCase()}`;
+        document.getElementById("hero-title-text").textContent = "Execute Custom Product Crawls";
+        document.getElementById("results-subtitle").textContent = "Top matching laptops crawled under your tenancy.";
+    }
+    
+    // Reset view
+    showTab("dashboard");
+    loadHistory();
+}
+
+// Handle Login request
+async function handleLoginFormSubmit(e) {
+    e.preventDefault();
+    const username = document.getElementById("login-username").value.trim();
+    const password = document.getElementById("login-password").value.trim();
+    
+    loginError.style.display = "none";
+    loginError.textContent = "";
+    
+    try {
+        const res = await fetch("/api/auth/login", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ username, password })
+        });
+        
+        if (!res.ok) {
+            const errData = await res.json();
+            throw new Error(errData.detail || "Authentication credentials rejected");
+        }
+        
+        document.getElementById("login-username").value = "";
+        document.getElementById("login-password").value = "";
+        await checkAuth();
+    } catch (err) {
+        loginError.textContent = err.message;
+        loginError.style.display = "block";
+    }
+}
+
+// Handle Logout request
+async function handleLogoutClick() {
+    try {
+        await fetch("/api/auth/logout", { method: "POST" });
+        showLoginView();
+    } catch (err) {
+        console.error("Logout failed:", err);
+    }
+}
+
+// Handle Admin provisioning request
+async function handleCreateCompanySubmit(e) {
+    e.preventDefault();
+    const company_name = document.getElementById("new-company-name").value.trim();
+    const username = document.getElementById("new-username").value.trim();
+    const password = document.getElementById("new-password").value.trim();
+    
+    createCompanyError.style.display = "none";
+    createCompanySuccess.style.display = "none";
+    
+    try {
+        const res = await fetch("/api/superadmin/companies", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ company_name, username, password })
+        });
+        
+        if (!res.ok) {
+            const errData = await res.json();
+            throw new Error(errData.detail || "Failed to provision new company");
+        }
+        
+        const data = await res.json();
+        createCompanySuccess.textContent = data.message;
+        createCompanySuccess.style.display = "block";
+        
+        document.getElementById("new-company-name").value = "";
+        document.getElementById("new-username").value = "";
+        document.getElementById("new-password").value = "";
+        
+        loadCompanies();
+    } catch (err) {
+        createCompanyError.textContent = err.message;
+        createCompanyError.style.display = "block";
+    }
+}
+
+// Load tenancies list
+async function loadCompanies() {
+    try {
+        const res = await fetch("/api/superadmin/companies");
+        if (!res.ok) throw new Error("Failed to load tenancies");
+        
+        const companies = await res.json();
+        companiesTableBody.innerHTML = "";
+        
+        if (companies.length === 0) {
+            companiesTableBody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--mute);">No active tenancies provisioned yet.</td></tr>`;
+            return;
+        }
+        
+        companies.forEach(comp => {
+            const tr = document.createElement("tr");
+            const dateStr = new Date(comp.created_at).toLocaleString();
+            
+            tr.innerHTML = `
+                <td><strong>${comp.company_name}</strong></td>
+                <td><code>${comp.username}</code></td>
+                <td><code>${comp.db_name}.db</code></td>
+                <td>${dateStr}</td>
+            `;
+            companiesTableBody.appendChild(tr);
+        });
+    } catch (err) {
+        console.error("Load companies error:", err);
+    }
 }
 
 // Theme Management
 function setupTheme() {
     const btnTheme = document.getElementById("btn-theme-toggle");
     
-    // Check saved theme or system preference
     const savedTheme = localStorage.getItem("theme");
     const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
     
@@ -199,7 +439,6 @@ function connectLogsSSE(jobId, limit) {
     sse.onmessage = (event) => {
         const message = event.data;
         
-        // Parse levels and format
         let level = "info";
         let cleanMsg = message;
         
@@ -214,7 +453,6 @@ function connectLogsSSE(jobId, limit) {
         addLogLine(cleanMsg, level);
         updateProgressFromLog(cleanMsg, limit);
         
-        // Finish condition
         if (cleanMsg.includes("Scraping completed successfully") || cleanMsg.includes("Task terminated due to errors")) {
             sse.close();
             onScrapeComplete(jobId);
@@ -244,12 +482,10 @@ function updateProgressFromLog(message, limit) {
     else if (msg.includes("saving scraped products")) percentage = 90;
     else if (msg.includes("scraping completed")) percentage = 100;
     else {
-        // Match detail page progress like "[2/5]"
         const match = message.match(/\[(\d+)\/(\d+)\]/);
         if (match) {
             const current = parseInt(match[1]);
             const total = parseInt(match[2]);
-            // Map [1..N] detail pages into the 65% -> 90% range
             percentage = 65 + Math.round((current / total) * 25);
         }
     }
@@ -263,37 +499,60 @@ function updateProgressFromLog(message, limit) {
 async function onScrapeComplete(jobId) {
     addLogLine("Fetching final scraped data payload...", "info");
     
-    try {
-        const response = await fetch(`/api/results/${jobId}`);
-        if (!response.ok) throw new Error("Failed to fetch results");
-        
-        const data = await response.json();
-        
-        if (data.status === "completed") {
-            activeResults = data.products;
-            renderResults(activeResults);
-            addLogLine(`Successfully loaded ${activeResults.length} scraped products to table view.`, "success");
-        } else {
-            addLogLine(`Job ended with status: ${data.status}. Reason: ${data.error_message || 'Unknown error'}`, "error");
+    let attempts = 0;
+    const maxAttempts = 10;
+    const pollInterval = 1500;
+    
+    async function fetchResults() {
+        try {
+            const response = await fetch(`/api/results/${jobId}`);
+            if (!response.ok) throw new Error("Failed to fetch results");
+            
+            const data = await response.json();
+            
+            if (data.status === "completed") {
+                activeResults = data.products;
+                renderResults(activeResults);
+                addLogLine(`Successfully loaded ${activeResults.length} scraped products to table view.`, "success");
+                cleanupUI();
+            } else if (data.status === "failed" || data.status === "stopped") {
+                addLogLine(`Job ended with status: ${data.status}. Reason: ${data.error_message || 'Unknown error'}`, "error");
+                cleanupUI();
+            } else {
+                attempts++;
+                if (attempts < maxAttempts) {
+                    setTimeout(fetchResults, pollInterval);
+                } else {
+                    addLogLine(`Job ended with status: ${data.status}. Reason: Task execution timed out.`, "error");
+                    cleanupUI();
+                }
+            }
+        } catch (err) {
+            addLogLine(`Error fetching results: ${err.message}`, "error");
+            cleanupUI();
         }
-        
-    } catch (err) {
-        addLogLine(`Error fetching results: ${err.message}`, "error");
-    } finally {
+    }
+    
+    function cleanupUI() {
         toggleInputs(false);
         setRunnerStatus("idle");
         btnStop.style.display = "none";
         btnSubmit.style.display = "flex";
-        loadHistory(); // Reload history grid
+        loadHistory();
     }
+    
+    fetchResults();
 }
 
 // Render Results Table
 function renderResults(products) {
     resultsTableBody.innerHTML = "";
     
+    const showCompanyCol = currentUser && currentUser.role === "superadmin";
+    
     if (products.length === 0) {
-        resultsTableBody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--mute);">No products scraped. Verify your website inputs and element selectors.</td></tr>`;
+        const colSpan = showCompanyCol ? 8 : 7;
+        resultsTableBody.innerHTML = `<tr><td colspan="${colSpan}" style="text-align: center; color: var(--mute);">No products scraped. Verify your website inputs and element selectors.</td></tr>`;
         resultsContainer.style.display = "block";
         return;
     }
@@ -305,6 +564,7 @@ function renderResults(products) {
         
         tr.innerHTML = `
             <td><img src="${thumbnailSrc}" class="table-thumbnail" alt="${product.title}"></td>
+            ${showCompanyCol ? `<td><span class="user-badge-premium">${product.company_name || 'N/A'}</span></td>` : ''}
             <td><strong>${product.brand || 'Unknown'}</strong></td>
             <td><div class="table-title" title="${product.title}">${product.title}</div></td>
             <td><strong>${product.price || 'N/A'}</strong></td>
@@ -315,7 +575,6 @@ function renderResults(products) {
         resultsTableBody.appendChild(tr);
     });
     
-    // Add Click Listeners to View Details
     document.querySelectorAll(".btn-view-details").forEach(btn => {
         btn.addEventListener("click", (e) => {
             const idx = parseInt(e.currentTarget.dataset.idx);
@@ -324,12 +583,10 @@ function renderResults(products) {
     });
     
     resultsContainer.style.display = "block";
-    
-    // Scroll to results
     resultsContainer.scrollIntoView({ behavior: 'smooth' });
 }
 
-// Parse "4.3 out of 5 stars" to "4.3"
+// Parse ratings
 function parseRating(ratingStr) {
     if (!ratingStr) return "N/A";
     const match = ratingStr.match(/(\d+\.\d+|\d+)/);
@@ -340,13 +597,17 @@ function parseRating(ratingStr) {
 async function loadHistory() {
     try {
         const response = await fetch("/api/history");
+        if (response.status === 401) return; // Ignore if called during logout
         if (!response.ok) throw new Error("Failed to fetch history");
         
         const jobs = await response.json();
         historyTableBody.innerHTML = "";
         
+        const showCompanyCol = currentUser && currentUser.role === "superadmin";
+        
         if (jobs.length === 0) {
-            historyTableBody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--mute);">No historical scraping runs found.</td></tr>`;
+            const colSpan = showCompanyCol ? 8 : 7;
+            historyTableBody.innerHTML = `<tr><td colspan="${colSpan}" style="text-align: center; color: var(--mute);">No historical scraping runs found.</td></tr>`;
             return;
         }
         
@@ -357,6 +618,7 @@ async function loadHistory() {
             tr.innerHTML = `
                 <td style="font-family: var(--font-mono); font-size: 12px;">${job.id.substring(0, 8)}...</td>
                 <td>${dateStr}</td>
+                ${showCompanyCol ? `<td><span class="user-badge-premium">${job.company_name || 'N/A'}</span></td>` : ''}
                 <td>${job.website}</td>
                 <td><code>${job.search_query}</code></td>
                 <td>${job.limit}</td>
@@ -370,7 +632,6 @@ async function loadHistory() {
             historyTableBody.appendChild(tr);
         });
         
-        // Add Action Click Listeners
         document.querySelectorAll(".btn-load-history").forEach(btn => {
             btn.addEventListener("click", async (e) => {
                 const jobId = e.currentTarget.dataset.jobId;
@@ -406,11 +667,9 @@ function openDetailsModal(product) {
     modalReviews.textContent = product.reviews_count ? `${product.reviews_count}` : 'No customer reviews';
     modalLink.href = product.url;
     
-    // Set Seller & Warranty
     document.getElementById("modal-product-seller").textContent = product.seller || "Unknown";
     document.getElementById("modal-product-warranty").textContent = product.warranty || "N/A";
     
-    // Specs Render
     modalSpecs.innerHTML = "";
     const specsKeys = Object.keys(product.specifications || {});
     if (specsKeys.length === 0) {
@@ -427,7 +686,6 @@ function openDetailsModal(product) {
         });
     }
     
-    // About Items Bullet points
     modalAbout.innerHTML = "";
     const bullets = product.about_items || [];
     if (bullets.length === 0) {
@@ -440,7 +698,6 @@ function openDetailsModal(product) {
         });
     }
     
-    // Description
     if (product.description) {
         modalDescContainer.style.display = "block";
         modalDesc.textContent = product.description;
@@ -448,7 +705,6 @@ function openDetailsModal(product) {
         modalDescContainer.style.display = "none";
     }
 
-    // Reviews Render
     const modalReviewsList = document.getElementById("modal-product-reviews-list");
     modalReviewsList.innerHTML = "";
     const reviews = product.reviews || [];
@@ -477,7 +733,6 @@ function openDetailsModal(product) {
         });
     }
     
-    // Show Modal
     detailsModal.classList.add("active");
 }
 
@@ -493,7 +748,6 @@ function toggleInputs(disabled) {
     inputHeadless.disabled = disabled;
     btnSubmit.disabled = disabled;
     
-    // Presets badges disabled
     document.querySelectorAll(".preset-btn").forEach(btn => {
         btn.disabled = disabled;
         btn.style.opacity = disabled ? "0.5" : "1";

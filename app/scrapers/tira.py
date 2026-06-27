@@ -67,126 +67,13 @@ class Scraper(BaseScraper):
             # Form search URL directly
             search_url = f"{url.rstrip('/')}/products/?q={urllib.parse.quote(search_query)}"
             
-            self.log(f"Navigating directly to search URL: {search_url}...")
-            self.driver.get(search_url)
-            
-            # Allow page to settle
-            time.sleep(3)
-            
-            # Close any popups if applicable (none specifically known for Tira search)
+            # Close popups on initial load if any
             try:
                 self.close_popups()
             except Exception as e:
                 self.log(f"Error closing popups: {str(e)}")
 
-            # Scroll down slowly to trigger lazy load elements
-            self.check_cancelled(results)
-            self.log("Scrolling page to load items...")
-            self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight / 3);")
-            time.sleep(1.5)
-            self.driver.execute_script("window.scrollTo(0, (document.body.scrollHeight / 3) * 2);")
-            time.sleep(1.5)
-            self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-            time.sleep(1.5)
-            
-            self.check_cancelled(results)
-            # Parse search results page
-            soup = BeautifulSoup(self.driver.page_source, "html.parser")
-            
-            self.log("Extracting product listings from search results...")
-            containers = soup.select(selectors["product_container"])
-            self.log(f"Found {len(containers)} raw product containers.")
-            
-            listings = []
-            for container in containers:
-                try:
-                    title_elem = container.select_one(selectors["title"])
-                    if not title_elem:
-                        if container.name == "a" and (container.has_attr("href") or container.has_attr("aria-label")):
-                            title_elem = container
-                        elif container.has_attr("aria-label"):
-                            title_elem = container
-                            
-                    if not title_elem:
-                        continue
-                    
-                    title = title_elem.get_text().strip()
-                    if not title and title_elem.has_attr("aria-label"):
-                        title = title_elem["aria-label"]
-                    
-                    link_elem = container.select_one(selectors["link"]) or title_elem
-                    if not link_elem or not link_elem.has_attr("href"):
-                        if container.name == "a" and container.has_attr("href"):
-                            link_elem = container
-                        else:
-                            link_elem = container.select_one("a[href]")
-                    
-                    if not link_elem or not link_elem.has_attr("href"):
-                        continue
-                        
-                    href = link_elem["href"]
-                    product_url = urllib.parse.urljoin(url, href)
-                    
-                    # Prevent duplicates
-                    if any(l["url"] == product_url for l in listings):
-                        continue
-                    
-                    price_elem = container.select_one(selectors["price"])
-                    price = price_elem.get_text().strip() if price_elem else None
-                    
-                    rating_elem = container.select_one(selectors["rating"])
-                    rating = rating_elem.get_text().strip() if rating_elem else None
-                    if not rating:
-                        match = re.search(r'(\d\.\d)\s*(?:★|out of 5)', container.get_text())
-                        if match:
-                            rating = match.group(1)
-                    
-                    reviews_count = None
-                    reviews_elem = container.select_one(selectors["reviews_count"])
-                    if reviews_elem:
-                        reviews_count = reviews_elem.get_text().strip()
-                    
-                    if not reviews_count:
-                        # Fallback to search inside card text for reviews count pattern: (123) or 123 Reviews
-                        match = re.search(r'\(?(\d[\d,]*)\)?\s*(?:Ratings|Reviews)', container.get_text(), re.IGNORECASE)
-                        if match:
-                            reviews_count = match.group(1)
-                    
-                    image_elem = container.select_one(selectors["image"])
-                    image_url = None
-                    if image_elem:
-                        for attr in ["src", "data-src", "data-original", "srcset"]:
-                            val = image_elem.get(attr)
-                            if val:
-                                if attr == "srcset":
-                                    val = val.split(",")[0].strip().split(" ")[0]
-                                if not val.startswith("data:image/"):
-                                    image_url = val
-                                    break
-                        if not image_url and image_elem.has_attr("src"):
-                            image_url = image_elem["src"]
-                    
-                    listings.append({
-                        "title": title,
-                        "url": product_url,
-                        "price": price,
-                        "rating": rating or "N/A",
-                        "reviews_count": reviews_count or "0",
-                        "image_url": image_url
-                    })
-                except Exception:
-                    continue
-                
-            # Score and limit results
-            keywords = [kw.lower() for kw in search_query.split()]
-            scored_listings = []
-            for item in listings:
-                score = sum(1 for kw in keywords if kw in item["title"].lower())
-                scored_listings.append((score, item))
-            
-            scored_listings.sort(key=lambda x: x[0], reverse=True)
-            candidate_listings = [item for _, item in scored_listings]
-            target_listings = candidate_listings[:limit]
+            target_listings = self._collect_listings_with_pagination(selectors, search_query, limit, initial_url=search_url)
             self.log(f"Selected {len(target_listings)} listings for details page parsing.")
             
             # Detail Scraping phase
