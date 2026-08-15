@@ -1,0 +1,27 @@
+# Ignore virtual environment
+venv/
+.venv/
+env/
+
+# Ignore python caches
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Ignore databases (since we'll mount a persistent volume at runtime)
+Databases/
+*.db
+
+# Ignore Git directory
+.git/
+.gitignore
+
+# Ignore local temporary/debug files
+static/*.png
+test_write.txt
+logs/
+.gemini/
+*.log

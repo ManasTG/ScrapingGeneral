@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  scraper:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=8000
+    volumes:
+      # Mount Databases folder locally to persist sqlite databases across runs
+      - ./Databases:/app/Databases
+      # Mount static folder locally to retrieve any screenshots or logs
+      - ./static:/app/static
+    # Chrome requires standard shared memory size adjustment to avoid crashing in containers
+    shm_size: 2gb
+    restart: always
