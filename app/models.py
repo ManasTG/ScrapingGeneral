@@ -16,6 +16,7 @@ class DBUser(Base):
     role = Column(String(50), nullable=False)  # "superadmin" or "admin"
     company_name = Column(String(255), nullable=True)
     db_name = Column(String(255), nullable=True)
+    status = Column(String(50), default="active")  # "active" or "revoked"
     created_at = Column(DateTime, default=datetime.utcnow)
 
 class DBSession(Base):

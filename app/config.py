@@ -2,7 +2,26 @@ import os
 
 # Database Config
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{os.path.join(BASE_DIR, 'scraper.db')}")
+DATABASES_DIR = os.path.join(BASE_DIR, "Databases")
+os.makedirs(DATABASES_DIR, exist_ok=True)
+
+# Auto-migrate existing database files from root to Databases/ if they exist
+for file_name in os.listdir(BASE_DIR):
+    if file_name.endswith(".db"):
+        old_path = os.path.join(BASE_DIR, file_name)
+        new_path = os.path.join(DATABASES_DIR, file_name)
+        if os.path.isfile(old_path):
+            try:
+                import shutil
+                if os.path.exists(new_path):
+                    # Remove the blank new file if it exists to allow overwriting with the populated old DB
+                    os.remove(new_path)
+                shutil.move(old_path, new_path)
+                print(f"Successfully migrated {file_name} to Databases/ folder")
+            except Exception as e:
+                print(f"Failed to migrate database file {file_name}: {e}")
+
+DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{os.path.join(DATABASES_DIR, 'scraper.db')}")
 
 
 # Selenium Config

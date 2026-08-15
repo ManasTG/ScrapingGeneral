@@ -31,16 +31,29 @@ const navCompanyName = document.getElementById("nav-company-name");
 const navDashboard = document.getElementById("nav-dashboard");
 const navHistory = document.getElementById("nav-history");
 const navAdministration = document.getElementById("nav-administration");
+const navSaasHistory = document.getElementById("nav-saas-history");
 
 const dashboardSection = document.getElementById("dashboard-section");
 const administrationSection = document.getElementById("administration-section");
+const saasHistorySection = document.getElementById("saas-history-section");
 const heroSection = document.getElementById("hero-section");
-const historySection = document.getElementById("history");
+const historySection = document.getElementById("history-section");
+const dashboardRecentHistory = document.getElementById("dashboard-recent-history");
+const dashboardHistoryTableBody = document.getElementById("dashboard-history-table-body");
+const btnDashboardToHistory = document.getElementById("btn-dashboard-to-history");
 
 const createCompanyForm = document.getElementById("create-company-form");
 const createCompanyError = document.getElementById("create-company-error");
 const createCompanySuccess = document.getElementById("create-company-success");
 const companiesTableBody = document.getElementById("companies-table-body");
+
+const saasHistoryTableBody = document.getElementById("saas-history-table-body");
+const saasHistoryFilterForm = document.getElementById("saas-history-filter-form");
+const saasFilterSearch = document.getElementById("saas-filter-search");
+const saasFilterCompany = document.getElementById("saas-filter-company");
+const saasFilterWebsite = document.getElementById("saas-filter-website");
+const saasFilterStatus = document.getElementById("saas-filter-status");
+const btnSaasFilterReset = document.getElementById("btn-saas-filter-reset");
 
 // Modal Elements
 const detailsModal = document.getElementById("details-modal");
@@ -59,6 +72,7 @@ const modalDesc = document.getElementById("modal-product-desc");
 const modalDescContainer = document.getElementById("modal-desc-container");
 
 // Export buttons
+const btnExportXlsx = document.getElementById("btn-export-xlsx");
 const btnExportCsv = document.getElementById("btn-export-csv");
 const btnExportJson = document.getElementById("btn-export-json");
 
@@ -101,6 +115,11 @@ function setupEventListeners() {
     });
 
     // Exports
+    btnExportXlsx.addEventListener("click", () => {
+        if (activeJobId) {
+            window.location.href = `/api/export/${activeJobId}/xlsx`;
+        }
+    });
     btnExportCsv.addEventListener("click", () => {
         if (activeJobId) {
             window.location.href = `/api/export/${activeJobId}/csv`;
@@ -120,41 +139,97 @@ function setupEventListeners() {
     
     navHistory.addEventListener("click", (e) => {
         e.preventDefault();
-        showTab("dashboard");
-        setTimeout(() => {
-            historySection.scrollIntoView({ behavior: "smooth" });
-        }, 100);
+        showTab("history");
     });
+    
+    if (btnDashboardToHistory) {
+        btnDashboardToHistory.addEventListener("click", () => {
+            showTab("history");
+        });
+    }
     
     navAdministration.addEventListener("click", (e) => {
         e.preventDefault();
         showTab("admin");
     });
+    
+    navSaasHistory.addEventListener("click", (e) => {
+        e.preventDefault();
+        showTab("saas-history");
+    });
+
+    // SaaS History Filters
+    if (saasHistoryFilterForm) {
+        saasHistoryFilterForm.addEventListener("submit", (e) => {
+            e.preventDefault();
+            loadSaasHistory();
+        });
+    }
+    if (btnSaasFilterReset) {
+        btnSaasFilterReset.addEventListener("click", () => {
+            saasFilterSearch.value = "";
+            saasFilterCompany.value = "";
+            saasFilterWebsite.value = "all";
+            saasFilterStatus.value = "all";
+            loadSaasHistory();
+        });
+    }
 }
 
 // Navigation Tab switcher
 function showTab(tab) {
+    navDashboard.classList.remove("active");
+    navHistory.classList.remove("active");
+    navAdministration.classList.remove("active");
+    navSaasHistory.classList.remove("active");
+    
     if (tab === "dashboard") {
         navDashboard.classList.add("active");
-        navHistory.classList.remove("active");
-        navAdministration.classList.remove("active");
         
         dashboardSection.style.display = "grid";
         heroSection.style.display = "block";
+        dashboardRecentHistory.style.display = "block";
+        historySection.style.display = "none";
         administrationSection.style.display = "none";
-        historySection.style.display = "block";
-    } else if (tab === "admin") {
-        navAdministration.classList.add("active");
-        navDashboard.classList.remove("active");
-        navHistory.classList.remove("active");
+        saasHistorySection.style.display = "none";
+        
+        loadDashboardHistory();
+    } else if (tab === "history") {
+        navHistory.classList.add("active");
         
         dashboardSection.style.display = "none";
         heroSection.style.display = "none";
+        dashboardRecentHistory.style.display = "none";
+        historySection.style.display = "block";
+        administrationSection.style.display = "none";
+        saasHistorySection.style.display = "none";
+        resultsContainer.style.display = "none";
+        
+        loadFullHistory();
+    } else if (tab === "admin") {
+        navAdministration.classList.add("active");
+        
+        dashboardSection.style.display = "none";
+        heroSection.style.display = "none";
+        dashboardRecentHistory.style.display = "none";
         administrationSection.style.display = "block";
+        saasHistorySection.style.display = "none";
         historySection.style.display = "none";
         resultsContainer.style.display = "none";
         
         loadCompanies();
+    } else if (tab === "saas-history") {
+        navSaasHistory.classList.add("active");
+        
+        dashboardSection.style.display = "none";
+        heroSection.style.display = "none";
+        dashboardRecentHistory.style.display = "none";
+        administrationSection.style.display = "none";
+        saasHistorySection.style.display = "block";
+        historySection.style.display = "none";
+        resultsContainer.style.display = "none";
+        
+        loadSaasHistory();
     }
 }
 
@@ -197,16 +272,28 @@ function setupUserDashboard(user) {
     // SuperAdmin view controls
     if (user.role === "superadmin") {
         navAdministration.style.display = "inline-block";
+        navSaasHistory.style.display = "inline-block";
         document.querySelectorAll(".col-company").forEach(el => el.style.display = "table-cell");
         document.getElementById("hero-company-badge").textContent = "SAAS CENTRAL PLATFORM";
         document.getElementById("hero-title-text").textContent = "SuperAdmin Data Control Center";
         document.getElementById("results-subtitle").textContent = "Mirrored product results from all companies.";
     } else {
         navAdministration.style.display = "none";
+        navSaasHistory.style.display = "none";
         document.querySelectorAll(".col-company").forEach(el => el.style.display = "none");
         document.getElementById("hero-company-badge").textContent = `TENANT CONSOLE - ${user.company_name.toUpperCase()}`;
         document.getElementById("hero-title-text").textContent = "Execute Custom Product Crawls";
         document.getElementById("results-subtitle").textContent = "Top matching laptops crawled under your tenancy.";
+    }
+    
+    // Toggle scraper revoked overlay
+    const overlay = document.getElementById("scraper-revoked-overlay");
+    if (overlay) {
+        if (user.status === "revoked") {
+            overlay.style.display = "flex";
+        } else {
+            overlay.style.display = "none";
+        }
     }
     
     // Reset view
@@ -301,21 +388,93 @@ async function loadCompanies() {
         companiesTableBody.innerHTML = "";
         
         if (companies.length === 0) {
-            companiesTableBody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--mute);">No active tenancies provisioned yet.</td></tr>`;
+            companiesTableBody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--mute);">No active tenancies provisioned yet.</td></tr>`;
             return;
         }
         
         companies.forEach(comp => {
             const tr = document.createElement("tr");
             const dateStr = new Date(comp.created_at).toLocaleString();
+            const isActive = comp.status === "active";
             
             tr.innerHTML = `
                 <td><strong>${comp.company_name}</strong></td>
                 <td><code>${comp.username}</code></td>
                 <td><code>${comp.db_name}.db</code></td>
                 <td>${dateStr}</td>
+                <td>
+                    <span class="status-badge ${isActive ? 'running' : 'stopped'}">
+                        ${comp.status || 'active'}
+                    </span>
+                </td>
+                <td>
+                    <div style="display: flex; gap: 8px;">
+                        <button class="button-secondary-sm btn-toggle-scraper" data-id="${comp.id}" data-name="${comp.company_name}" data-action="${isActive ? 'revoke' : 'reactivate'}" style="border-color: var(--warning); color: var(--warning-deep); padding: 0 10px; height: 26px; font-size: 11px; margin: 0; display: inline-flex; align-items: center; gap: 4px;">
+                            <i class="fa-solid ${isActive ? 'fa-ban' : 'fa-circle-check'}"></i>
+                            ${isActive ? 'Revoke Scraper' : 'Reactivate Scraper'}
+                        </button>
+                        <button class="button-secondary-sm btn-remove-user" data-id="${comp.id}" data-name="${comp.company_name}" style="border-color: var(--error); color: var(--error); padding: 0 10px; height: 26px; font-size: 11px; margin: 0; display: inline-flex; align-items: center; gap: 4px;">
+                            <i class="fa-solid fa-user-xmark"></i> Remove User
+                        </button>
+                    </div>
+                </td>
             `;
             companiesTableBody.appendChild(tr);
+        });
+        
+        // Add event listeners to Toggle Scraper buttons
+        document.querySelectorAll(".btn-toggle-scraper").forEach(btn => {
+            btn.addEventListener("click", async (e) => {
+                const adminId = e.currentTarget.dataset.id;
+                const companyName = e.currentTarget.dataset.name;
+                const action = e.currentTarget.dataset.action;
+                
+                const promptMsg = action === 'revoke' 
+                    ? `Are you sure you want to revoke scraping access for "${companyName}"? They can still login and view database logs, but cannot run scrapers.`
+                    : `Are you sure you want to reactivate scraping access for "${companyName}"?`;
+                
+                if (confirm(promptMsg)) {
+                    try {
+                        const toggleRes = await fetch(`/api/superadmin/companies/${adminId}/toggle-status`, {
+                            method: "POST"
+                        });
+                        if (!toggleRes.ok) {
+                            const errData = await toggleRes.json();
+                            throw new Error(errData.detail || "Failed to toggle status");
+                        }
+                        const data = await toggleRes.json();
+                        alert(data.message);
+                        loadCompanies();
+                    } catch (err) {
+                        alert(`Error: ${err.message}`);
+                    }
+                }
+            });
+        });
+
+        // Add event listeners to Remove User buttons
+        document.querySelectorAll(".btn-remove-user").forEach(btn => {
+            btn.addEventListener("click", async (e) => {
+                const adminId = e.currentTarget.dataset.id;
+                const companyName = e.currentTarget.dataset.name;
+                
+                if (confirm(`Are you sure you want to remove the user account for company "${companyName}"? They will lose all access to the system, but their database file copy will remain preserved on the server.`)) {
+                    try {
+                        const removeRes = await fetch(`/api/superadmin/companies/${adminId}`, {
+                            method: "DELETE"
+                        });
+                        if (!removeRes.ok) {
+                            const errData = await removeRes.json();
+                            throw new Error(errData.detail || "Failed to remove user account");
+                        }
+                        const data = await removeRes.json();
+                        alert(data.message);
+                        loadCompanies();
+                    } catch (err) {
+                        alert(`Error: ${err.message}`);
+                    }
+                }
+            });
         });
     } catch (err) {
         console.error("Load companies error:", err);
@@ -515,6 +674,7 @@ async function onScrapeComplete(jobId) {
                 renderResults(activeResults);
                 addLogLine(`Successfully loaded ${activeResults.length} scraped products to table view.`, "success");
                 cleanupUI();
+                triggerExportGlow();
             } else if (data.status === "failed" || data.status === "stopped") {
                 addLogLine(`Job ended with status: ${data.status}. Reason: ${data.error_message || 'Unknown error'}`, "error");
                 cleanupUI();
@@ -551,7 +711,7 @@ function renderResults(products) {
     const showCompanyCol = currentUser && currentUser.role === "superadmin";
     
     if (products.length === 0) {
-        const colSpan = showCompanyCol ? 8 : 7;
+        const colSpan = showCompanyCol ? 7 : 6;
         resultsTableBody.innerHTML = `<tr><td colspan="${colSpan}" style="text-align: center; color: var(--mute);">No products scraped. Verify your website inputs and element selectors.</td></tr>`;
         resultsContainer.style.display = "block";
         return;
@@ -560,10 +720,7 @@ function renderResults(products) {
     products.forEach((product, idx) => {
         const tr = document.createElement("tr");
         
-        const thumbnailSrc = product.image_url || "https://placehold.co/100x100?text=No+Image";
-        
         tr.innerHTML = `
-            <td><img src="${thumbnailSrc}" class="table-thumbnail" alt="${product.title}"></td>
             ${showCompanyCol ? `<td><span class="user-badge-premium">${product.company_name || 'N/A'}</span></td>` : ''}
             <td><strong>${product.brand || 'Unknown'}</strong></td>
             <td><div class="table-title" title="${product.title}">${product.title}</div></td>
@@ -594,74 +751,108 @@ function parseRating(ratingStr) {
 }
 
 // Render Past History Grid
-async function loadHistory() {
-    try {
-        const response = await fetch("/api/history");
-        if (response.status === 401) return; // Ignore if called during logout
-        if (!response.ok) throw new Error("Failed to fetch history");
-        
-        const jobs = await response.json();
-        historyTableBody.innerHTML = "";
-        
-        const showCompanyCol = currentUser && currentUser.role === "superadmin";
-        
-        if (jobs.length === 0) {
-            const colSpan = showCompanyCol ? 8 : 7;
-            historyTableBody.innerHTML = `<tr><td colspan="${colSpan}" style="text-align: center; color: var(--mute);">No historical scraping runs found.</td></tr>`;
-            return;
-        }
-        
-        jobs.forEach(job => {
-            const tr = document.createElement("tr");
-            const dateStr = new Date(job.created_at).toLocaleString();
-            
-            tr.innerHTML = `
-                <td style="font-family: var(--font-mono); font-size: 12px;">${job.id.substring(0, 8)}...</td>
-                <td>${dateStr}</td>
-                ${showCompanyCol ? `<td><span class="user-badge-premium">${job.company_name || 'N/A'}</span></td>` : ''}
-                <td>${job.website}</td>
-                <td><code>${job.search_query}</code></td>
-                <td>${job.limit}</td>
-                <td><span class="status-badge ${job.status}">${job.status}</span></td>
-                <td>
-                    <button class="button-secondary-sm btn-load-history" data-job-id="${job.id}">
-                        Load Data
-                    </button>
-                </td>
-            `;
-            historyTableBody.appendChild(tr);
-        });
-        
-        document.querySelectorAll(".btn-load-history").forEach(btn => {
-            btn.addEventListener("click", async (e) => {
-                const jobId = e.currentTarget.dataset.jobId;
-                activeJobId = jobId;
-                progressBar.style.width = "100%";
-                addLogLine(`Loading historical data for job ${jobId}...`, "info");
-                
-                try {
-                    const res = await fetch(`/api/results/${jobId}`);
-                    if (!res.ok) throw new Error("Failed to fetch historical data");
-                    const data = await res.json();
-                    activeResults = data.products;
-                    renderResults(activeResults);
-                    addLogLine(`Loaded ${activeResults.length} items from DB successfully.`, "success");
-                } catch(err) {
-                    addLogLine(`Error: ${err.message}`, "error");
-                }
-            });
-        });
-        
-    } catch(err) {
-        console.error("History fetch error:", err);
+// Render a table of jobs to a specific tbody element
+function populateHistoryTable(jobs, tbodyElement) {
+    tbodyElement.innerHTML = "";
+    const showCompanyCol = currentUser && currentUser.role === "superadmin";
+    
+    if (jobs.length === 0) {
+        const colSpan = showCompanyCol ? 8 : 7;
+        tbodyElement.innerHTML = `<tr><td colspan="${colSpan}" style="text-align: center; color: var(--mute);">No historical scraping runs found.</td></tr>`;
+        return;
     }
+    
+    jobs.forEach(job => {
+        const tr = document.createElement("tr");
+        const dateStr = new Date(job.created_at).toLocaleString();
+        
+        tr.innerHTML = `
+            <td style="font-family: var(--font-mono); font-size: 12px;">${job.id.substring(0, 8)}...</td>
+            <td>${dateStr}</td>
+            ${showCompanyCol ? `<td><span class="user-badge-premium">${job.company_name || 'N/A'}</span></td>` : ''}
+            <td>${job.website}</td>
+            <td><code>${job.search_query}</code></td>
+            <td>${job.limit}</td>
+            <td><span class="status-badge ${job.status}">${job.status}</span></td>
+            <td>
+                <button class="button-secondary-sm btn-load-history" data-job-id="${job.id}">
+                    Load Data
+                </button>
+            </td>
+        `;
+        tbodyElement.appendChild(tr);
+    });
+    
+    // Bind listeners inside this tbody
+    tbodyElement.querySelectorAll(".btn-load-history").forEach(btn => {
+        btn.addEventListener("click", async (e) => {
+            const jobId = e.currentTarget.dataset.jobId;
+            activeJobId = jobId;
+            progressBar.style.width = "100%";
+            addLogLine(`Loading historical data for job ${jobId}...`, "info");
+            
+            try {
+                const res = await fetch(`/api/results/${jobId}`);
+                if (!res.ok) throw new Error("Failed to fetch historical data");
+                const data = await res.json();
+                activeResults = data.products;
+                
+                // Show dashboard and render results container
+                showTab("dashboard");
+                resultsContainer.style.display = "block";
+                renderResults(activeResults);
+                resultsContainer.scrollIntoView({ behavior: "smooth" });
+                
+                addLogLine(`Loaded ${activeResults.length} items from DB successfully.`, "success");
+            } catch(err) {
+                addLogLine(`Error: ${err.message}`, "error");
+            }
+        });
+    });
+}
+
+// Load recent history (10 rows) for dashboard
+async function loadDashboardHistory() {
+    try {
+        const response = await fetch("/api/history?limit=10");
+        if (response.status === 401) return;
+        if (!response.ok) throw new Error("Failed to fetch dashboard history");
+        const jobs = await response.json();
+        populateHistoryTable(jobs, dashboardHistoryTableBody);
+    } catch(err) {
+        console.error("Dashboard history fetch error:", err);
+    }
+}
+
+// Load full history (100 rows) for dedicated History tab
+async function loadFullHistory() {
+    try {
+        const response = await fetch("/api/history?limit=100");
+        if (response.status === 401) return;
+        if (!response.ok) throw new Error("Failed to fetch full history");
+        const jobs = await response.json();
+        populateHistoryTable(jobs, historyTableBody);
+    } catch(err) {
+        console.error("Full history fetch error:", err);
+    }
+}
+
+// Render Past History Grid (Compatibility wrapper)
+async function loadHistory() {
+    await loadDashboardHistory();
 }
 
 // Modal Detail Drawer Operations
 function openDetailsModal(product) {
     modalBrand.textContent = product.brand ? product.brand.toUpperCase() : "UNKNOWN BRAND";
     modalTitle.textContent = product.title;
-    modalImage.src = product.image_url || "https://placehold.co/300x300?text=No+Product+Image";
+    if (product.image_url) {
+        modalImage.src = product.image_url;
+        modalImage.parentElement.style.display = "flex";
+    } else {
+        modalImage.src = "";
+        modalImage.parentElement.style.display = "none";
+    }
     modalPrice.textContent = product.price || "N/A";
     modalRating.innerHTML = `<i class="fa-solid fa-star"></i> ${product.rating || 'No ratings'}`;
     modalReviews.textContent = product.reviews_count ? `${product.reviews_count}` : 'No customer reviews';
@@ -791,4 +982,86 @@ function escapeHtml(text) {
         "'": '&#039;'
     };
     return text.replace(/[&<>"']/g, function(m) { return map[m]; });
+}
+
+function triggerExportGlow() {
+    const exportButtons = document.querySelectorAll(".results-actions button");
+    exportButtons.forEach(btn => btn.classList.add("export-btn-glow"));
+    setTimeout(() => {
+        exportButtons.forEach(btn => btn.classList.remove("export-btn-glow"));
+    }, 10000);
+}
+
+// Fetch SaaS central history (for superadmin) with filtering
+async function loadSaasHistory() {
+    try {
+        const search = saasFilterSearch.value.trim();
+        const company = saasFilterCompany.value.trim();
+        const website = saasFilterWebsite.value;
+        const status = saasFilterStatus.value;
+        
+        let url = `/api/superadmin/history?skip=0&limit=100`;
+        if (search) url += `&search=${encodeURIComponent(search)}`;
+        if (company) url += `&company=${encodeURIComponent(company)}`;
+        if (website && website !== "all") url += `&website=${encodeURIComponent(website)}`;
+        if (status && status !== "all") url += `&status=${encodeURIComponent(status)}`;
+        
+        const response = await fetch(url);
+        if (response.status === 401) return;
+        if (!response.ok) throw new Error("Failed to fetch superadmin history");
+        
+        const data = await response.json();
+        const jobs = data.jobs;
+        
+        saasHistoryTableBody.innerHTML = "";
+        
+        if (jobs.length === 0) {
+            saasHistoryTableBody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--mute);">No historical scraping runs found matching filters.</td></tr>`;
+            return;
+        }
+        
+        jobs.forEach(job => {
+            const tr = document.createElement("tr");
+            const dateStr = new Date(job.created_at).toLocaleString();
+            
+            tr.innerHTML = `
+                <td style="font-family: var(--font-mono); font-size: 12px;">${job.id.substring(0, 8)}...</td>
+                <td>${dateStr}</td>
+                <td><span class="user-badge-premium">${job.company_name || 'N/A'}</span></td>
+                <td>${job.website}</td>
+                <td><code>${job.search_query}</code></td>
+                <td>${job.limit}</td>
+                <td><span class="status-badge ${job.status}">${job.status}</span></td>
+                <td>
+                    <button class="button-secondary-sm btn-load-saas-history" data-job-id="${job.id}">
+                        Load Data
+                    </button>
+                </td>
+            `;
+            saasHistoryTableBody.appendChild(tr);
+        });
+        
+        document.querySelectorAll(".btn-load-saas-history").forEach(btn => {
+            btn.addEventListener("click", async (e) => {
+                const jobId = e.currentTarget.dataset.jobId;
+                activeJobId = jobId;
+                progressBar.style.width = "100%";
+                addLogLine(`Loading central historical data for job ${jobId}...`, "info");
+                
+                try {
+                    const res = await fetch(`/api/results/${jobId}`);
+                    if (!res.ok) throw new Error("Failed to fetch historical data");
+                    const data = await res.json();
+                    activeResults = data.products;
+                    renderResults(activeResults);
+                    addLogLine(`Loaded ${activeResults.length} items from central DB successfully.`, "success");
+                } catch(err) {
+                    addLogLine(`Error: ${err.message}`, "error");
+                }
+            });
+        });
+        
+    } catch (err) {
+        console.error("SaaS History load error:", err);
+    }
 }

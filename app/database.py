@@ -5,7 +5,7 @@ from contextlib import contextmanager
 from typing import Generator, List, Optional
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import sessionmaker, Session
-from app.config import DATABASE_URL, BASE_DIR
+from app.config import DATABASE_URL, BASE_DIR, DATABASES_DIR
 from app.models import Base, DBScrapeJob, DBScrapedProduct, DBUser, DBSession
 
 # Create database engine for central database
@@ -27,7 +27,7 @@ _sessionmakers = {}
 
 def get_tenant_db_session(db_name: str) -> Session:
     if db_name not in _engines:
-        db_path = os.path.join(BASE_DIR, f"{db_name}.db")
+        db_path = os.path.join(DATABASES_DIR, f"{db_name}.db")
         db_url = f"sqlite:///{db_path}"
         tenant_engine = create_engine(db_url, connect_args={"check_same_thread": False})
         
@@ -65,6 +65,7 @@ def init_db() -> None:
     prod_columns = [col["name"] for col in inspector.get_columns("scraped_products")]
     job_columns = [col["name"] for col in inspector.get_columns("scrape_jobs")]
     
+    user_columns = [col["name"] for col in inspector.get_columns("users")]
     with engine.begin() as conn:
         if "seller" not in prod_columns:
             conn.execute(text("ALTER TABLE scraped_products ADD COLUMN seller VARCHAR(255)"))
@@ -76,6 +77,8 @@ def init_db() -> None:
             conn.execute(text("ALTER TABLE scraped_products ADD COLUMN company_name VARCHAR(255)"))
         if "company_name" not in job_columns:
             conn.execute(text("ALTER TABLE scrape_jobs ADD COLUMN company_name VARCHAR(255)"))
+        if "status" not in user_columns:
+            conn.execute(text("ALTER TABLE users ADD COLUMN status VARCHAR(50) DEFAULT 'active'"))
             
     # Seed default superadmin if no users exist
     db = SessionLocal()
@@ -225,4 +228,14 @@ def mirror_save_scraped_product(job_id: str, product_data: dict, company_name: s
         )
         central_db.add(product)
         central_db.commit()
+
+def close_tenant_db(db_name: str) -> None:
+    if db_name in _engines:
+        try:
+            _engines[db_name].dispose()
+        except Exception:
+            pass
+        del _engines[db_name]
+    if db_name in _sessionmakers:
+        del _sessionmakers[db_name]
 

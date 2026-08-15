@@ -11,7 +11,7 @@
     <!-- FontAwesome for some standard icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- CSS Stylesheet -->
-    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="/static/style.css?v=10">
     <style>
         .user-badge-premium {
             background-color: var(--primary);
@@ -79,6 +79,7 @@
                 <nav class="nav-links">
                     <a href="#dashboard" class="nav-link active" id="nav-dashboard">Dashboard</a>
                     <a href="#history" class="nav-link" id="nav-history">History</a>
+                    <a href="#saas-history" class="nav-link" id="nav-saas-history" style="display: none;">SaaS History</a>
                     <a href="#administration" class="nav-link" id="nav-administration" style="display: none;">SaaS Admin</a>
                 </nav>
                 <div class="nav-actions" style="gap: 12px;">
@@ -113,7 +114,13 @@
             <div class="workspace-grid" id="dashboard-section">
                 <!-- Left Side: Control panel -->
                 <div class="control-panel">
-                    <div class="card-marketing">
+                    <div class="card-marketing" style="position: relative;">
+                        <!-- Scraper Access Revoked Overlay -->
+                        <div id="scraper-revoked-overlay" style="display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: var(--canvas-overlay); z-index: 100; backdrop-filter: blur(4px); border-radius: 8px; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 24px; box-sizing: border-box;">
+                            <i class="fa-solid fa-ban" style="font-size: 40px; color: var(--error); margin-bottom: 12px;"></i>
+                            <h3 style="font-size: 16px; font-weight: 600; color: var(--ink); margin-bottom: 6px;">Scraper Access Revoked</h3>
+                            <p style="font-size: 12.5px; color: var(--mute); line-height: 18px; max-width: 260px; margin: 0 auto;">Your company's scraper execution permissions have been suspended by the administrator.</p>
+                        </div>
                         <h2 class="section-subtitle">Scraping Parameters</h2>
                         <form id="scrape-form" class="scrape-form">
                             <div class="form-group">
@@ -253,6 +260,105 @@
                 </div>
             </div>
 
+            <!-- SaaS Central History View (SuperAdmin History Control) -->
+            <div id="saas-history-section" style="display: none; margin-bottom: 48px;">
+                <section class="history-section" style="margin-top: 0;">
+                    <h2 class="display-lg">SaaS Platform History.</h2>
+                    <p class="body-md">Search and filter through all automated scraping runs executed across the platform.</p>
+
+                    <!-- Filter Controls Panel -->
+                    <div class="card-marketing" style="margin-bottom: 24px; padding: 20px;">
+                        <h3 class="section-subtitle" style="margin-top: 0; margin-bottom: 16px;"><i class="fa-solid fa-filter"></i> Advanced Filters</h3>
+                        <form id="saas-history-filter-form" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; align-items: end;">
+                            <div class="form-group" style="margin-bottom: 0;">
+                                <label for="saas-filter-search" class="form-label">Search Query / Job ID</label>
+                                <div class="input-wrapper">
+                                    <i class="fa-solid fa-magnifying-glass input-icon"></i>
+                                    <input type="text" id="saas-filter-search" class="form-input" placeholder="Search query or ID...">
+                                </div>
+                            </div>
+
+                            <div class="form-group" style="margin-bottom: 0;">
+                                <label for="saas-filter-company" class="form-label">Company Name</label>
+                                <div class="input-wrapper">
+                                    <i class="fa-solid fa-building input-icon"></i>
+                                    <input type="text" id="saas-filter-company" class="form-input" placeholder="Filter by company...">
+                                </div>
+                            </div>
+
+                            <div class="form-group" style="margin-bottom: 0;">
+                                <label for="saas-filter-website" class="form-label">Website</label>
+                                <div class="input-wrapper">
+                                    <i class="fa-solid fa-globe input-icon"></i>
+                                    <select id="saas-filter-website" class="form-input">
+                                        <option value="all">All Websites</option>
+                                        <option value="amazon">Amazon</option>
+                                        <option value="flipkart">Flipkart</option>
+                                        <option value="bigbasket">BigBasket</option>
+                                        <option value="zepto">Zepto</option>
+                                        <option value="nykaa">Nykaa</option>
+                                        <option value="myntra">Myntra</option>
+                                        <option value="jiomart">JioMart</option>
+                                        <option value="purplle">Purplle</option>
+                                        <option value="tira">Tira</option>
+                                        <option value="kult">Kult</option>
+                                        <option value="smytten">Smytten</option>
+                                        <option value="alibaba">Alibaba</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="form-group" style="margin-bottom: 0;">
+                                <label for="saas-filter-status" class="form-label">Status</label>
+                                <div class="input-wrapper">
+                                    <i class="fa-solid fa-circle-question input-icon"></i>
+                                    <select id="saas-filter-status" class="form-input">
+                                        <option value="all">All Statuses</option>
+                                        <option value="pending">Pending</option>
+                                        <option value="running">Running</option>
+                                        <option value="completed">Completed</option>
+                                        <option value="failed">Failed</option>
+                                        <option value="stopped">Stopped</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div style="display: flex; gap: 8px;">
+                                <button type="submit" class="button-primary" id="btn-saas-filter-submit" style="height: 40px; margin: 0;">
+                                    <span>Apply</span> <i class="fa-solid fa-check"></i>
+                                </button>
+                                <button type="button" class="button-secondary-sm" id="btn-saas-filter-reset" style="height: 40px; padding: 0 16px; border-radius: 9999px;">
+                                    <span>Reset</span> <i class="fa-solid fa-arrow-rotate-left"></i>
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <!-- SaaS History Table -->
+                    <div class="card-marketing shadow-table">
+                        <div class="table-responsive">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Job ID</th>
+                                        <th>Created At</th>
+                                        <th>Company</th>
+                                        <th>Website</th>
+                                        <th>Search Query</th>
+                                        <th>Limit</th>
+                                        <th>Status</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="saas-history-table-body">
+                                    <!-- Populated dynamically via JS -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
             <!-- SaaS Administration View (SuperAdmin Control Center) -->
             <div id="administration-section" style="display: none; margin-bottom: 48px;">
                 <div class="workspace-grid">
@@ -304,6 +410,8 @@
                                             <th>Admin Username</th>
                                             <th>Database File</th>
                                             <th>Created At</th>
+                                            <th>Status</th>
+                                            <th>Actions</th>
                                         </tr>
                                     </thead>
                                     <tbody id="companies-table-body">
@@ -324,6 +432,9 @@
                         <p class="body-md" id="results-subtitle">Top matching items scraped from target site details pages.</p>
                     </div>
                     <div class="results-actions">
+                        <button class="button-secondary-sm" id="btn-export-xlsx">
+                            <i class="fa-solid fa-file-excel"></i> Export Excel
+                        </button>
                         <button class="button-secondary-sm" id="btn-export-csv">
                             <i class="fa-solid fa-file-csv"></i> Export CSV
                         </button>
@@ -338,7 +449,6 @@
                         <table class="data-table">
                             <thead>
                                 <tr>
-                                    <th>Thumbnail</th>
                                     <th class="col-company" style="display: none;">Company</th>
                                     <th>Brand</th>
                                     <th>Product Title</th>
@@ -356,10 +466,10 @@
                 </div>
             </section>
 
-            <!-- Scraping History Section -->
-            <section class="history-section" id="history">
-                <h2 class="display-lg">Scraping History.</h2>
-                <p class="body-md">A history of past crawling job executions and statuses.</p>
+            <!-- Dashboard Scraping History (Latest 10 Runs) -->
+            <section class="history-section" id="dashboard-recent-history">
+                <h2 class="display-lg">Recent Runs.</h2>
+                <p class="body-md">Your 10 most recent scraping executions.</p>
                 
                 <div class="card-marketing shadow-table">
                     <div class="table-responsive">
@@ -376,13 +486,48 @@
                                     <th>Action</th>
                                 </tr>
                             </thead>
-                            <tbody id="history-table-body">
+                            <tbody id="dashboard-history-table-body">
                                 <!-- Populated dynamically via JS -->
                             </tbody>
                         </table>
                     </div>
                 </div>
+                <div style="display: flex; justify-content: flex-end; margin-top: 16px;">
+                    <button class="button-secondary-sm" id="btn-dashboard-to-history" style="height: 36px; padding: 0 16px; border-radius: 9999px;">
+                        <span>View Full History</span> <i class="fa-solid fa-arrow-right"></i>
+                    </button>
+                </div>
             </section>
+
+            <!-- Scraping History Section (Dedicated Tab) -->
+            <div id="history-section" style="display: none; margin-bottom: 48px;">
+                <section class="history-section" style="margin-top: 0;">
+                    <h2 class="display-lg">Scraping History.</h2>
+                    <p class="body-md">A complete history of past crawling job executions and statuses.</p>
+                    
+                    <div class="card-marketing shadow-table">
+                        <div class="table-responsive">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Job ID</th>
+                                        <th>Created At</th>
+                                        <th class="col-company" style="display: none;">Company</th>
+                                        <th>Website</th>
+                                        <th>Search Query</th>
+                                        <th>Limit</th>
+                                        <th>Status</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="history-table-body">
+                                    <!-- Populated dynamically via JS -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+            </div>
         </main>
 
         <!-- Product Details Drawer Modal (Vercel Style) -->
@@ -497,7 +642,7 @@
     </div>
 
     <!-- App Frontend JS -->
-    <script src="/static/app.js"></script>
+    <script src="/static/app.js?v=10"></script>
 </body>
 </html>
 

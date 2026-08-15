@@ -5,7 +5,8 @@ import importlib
 import re
 import hashlib
 import pandas as pd
-from typing import Dict, Optional
+from typing import Dict, Optional, Generator
+from pydantic import BaseModel
 from fastapi import FastAPI, Request, BackgroundTasks, Depends, HTTPException
 from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -18,7 +19,8 @@ from app.database import (
     init_db, get_db_context, get_tenant_db_session, SessionLocal,
     create_scrape_job, update_job_status, save_scraped_product,
     get_job_by_id, get_jobs_history,
-    mirror_create_job, mirror_update_job_status, mirror_save_scraped_product
+    mirror_create_job, mirror_update_job_status, mirror_save_scraped_product,
+    close_tenant_db
 )
 
 from app.scrapers.base import ScrapeCancelledException
@@ -238,7 +240,8 @@ def get_me(user: Optional[DBUser] = Depends(get_current_user)):
         "username": user.username,
         "role": user.role,
         "company_name": user.company_name,
-        "db_name": user.db_name
+        "db_name": user.db_name,
+        "status": user.status or "active"
     }
 
 # SuperAdmin Management Endpoints
@@ -260,7 +263,8 @@ def get_companies(user: Optional[DBUser] = Depends(get_current_user)):
                 "username": admin.username,
                 "company_name": admin.company_name,
                 "db_name": admin.db_name,
-                "created_at": admin.created_at
+                "created_at": admin.created_at,
+                "status": admin.status or "active"
             } for admin in admins
         ]
 
@@ -295,11 +299,55 @@ def create_company(payload: CompanyCreatePayload, user: Optional[DBUser] = Depen
         
         return {"message": f"Company '{payload.company_name}' provisioned successfully with database '{db_name}'"}
 
+@app.delete("/api/superadmin/companies/{admin_id}")
+def revoke_company(admin_id: int, user: Optional[DBUser] = Depends(get_current_user)):
+    if not user or user.role != "superadmin":
+        raise HTTPException(status_code=403, detail="Access denied")
+        
+    with get_db_context() as central_db:
+        admin = central_db.query(DBUser).filter(DBUser.id == admin_id, DBUser.role == "admin").first()
+        if not admin:
+            raise HTTPException(status_code=404, detail="Company/Admin not found")
+            
+        # Invalidate active sessions
+        central_db.query(DBSession).filter(DBSession.username == admin.username).delete()
+        
+        # Clean up database connection engines (preserves file copy on server side)
+        db_name = admin.db_name
+        close_tenant_db(db_name)
+        
+        # Delete admin user
+        company_name = admin.company_name
+        central_db.delete(admin)
+        central_db.commit()
+        
+        return {"message": f"User account for company '{company_name}' has been deleted. Database copy remains preserved on our server."}
+
+@app.post("/api/superadmin/companies/{admin_id}/toggle-status")
+def toggle_company_status(admin_id: int, user: Optional[DBUser] = Depends(get_current_user)):
+    if not user or user.role != "superadmin":
+        raise HTTPException(status_code=403, detail="Access denied")
+        
+    with get_db_context() as central_db:
+        admin = central_db.query(DBUser).filter(DBUser.id == admin_id, DBUser.role == "admin").first()
+        if not admin:
+            raise HTTPException(status_code=404, detail="Company/Admin not found")
+            
+        new_status = "revoked" if (admin.status or "active") == "active" else "active"
+        admin.status = new_status
+        central_db.commit()
+        
+        action = "revoked" if new_status == "revoked" else "reactivated"
+        return {"message": f"Scraping access for company '{admin.company_name}' has been successfully {action}."}
+
 # Scraping API Routes
 @app.post("/api/scrape")
 def trigger_scrape(payload: SearchRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db), user: Optional[DBUser] = Depends(get_current_user)):
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
+        
+    if user.status == "revoked":
+        raise HTTPException(status_code=403, detail="Access to scraping engine has been revoked for this company")
         
     job_id = str(uuid.uuid4())
     comp_name = user.company_name if user.role == "admin" else None
@@ -416,11 +464,11 @@ def get_results(job_id: str, db: Session = Depends(get_db), user: Optional[DBUse
 
 # History of past runs
 @app.get("/api/history")
-def get_history(db: Session = Depends(get_db), user: Optional[DBUser] = Depends(get_current_user)):
+def get_history(limit: int = 20, db: Session = Depends(get_db), user: Optional[DBUser] = Depends(get_current_user)):
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
         
-    jobs = get_jobs_history(db)
+    jobs = get_jobs_history(db, limit=limit)
     return [
         {
             "id": j.id,
@@ -432,6 +480,53 @@ def get_history(db: Session = Depends(get_db), user: Optional[DBUser] = Depends(
             "company_name": j.company_name
         } for j in jobs
     ]
+
+# SuperAdmin History of all runs with search & filters
+@app.get("/api/superadmin/history")
+def get_superadmin_history(
+    search: Optional[str] = None,
+    website: Optional[str] = None,
+    company: Optional[str] = None,
+    status: Optional[str] = None,
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+    user: Optional[DBUser] = Depends(get_current_user)
+):
+    if not user or user.role != "superadmin":
+        raise HTTPException(status_code=403, detail="Access denied")
+        
+    query = db.query(DBScrapeJob)
+    
+    if search:
+        query = query.filter(
+            (DBScrapeJob.id.contains(search)) | 
+            (DBScrapeJob.search_query.contains(search))
+        )
+    if website and website != "all":
+        query = query.filter(DBScrapeJob.website == website)
+    if company:
+        query = query.filter(DBScrapeJob.company_name.contains(company))
+    if status and status != "all":
+        query = query.filter(DBScrapeJob.status == status)
+        
+    total = query.count()
+    jobs = query.order_by(DBScrapeJob.created_at.desc()).offset(skip).limit(limit).all()
+    
+    return {
+        "total": total,
+        "jobs": [
+            {
+                "id": j.id,
+                "website": j.website,
+                "search_query": j.search_query,
+                "limit": j.limit,
+                "status": j.status,
+                "created_at": j.created_at,
+                "company_name": j.company_name
+            } for j in jobs
+        ]
+    }
 
 # Export to CSV
 @app.get("/api/export/{job_id}/csv")
@@ -475,6 +570,56 @@ def export_csv(job_id: str, db: Session = Depends(get_db), user: Optional[DBUser
     return StreamingResponse(
         iter([csv_data]),
         media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+# Export to Excel (XLSX)
+@app.get("/api/export/{job_id}/xlsx")
+def export_xlsx(job_id: str, db: Session = Depends(get_db), user: Optional[DBUser] = Depends(get_current_user)):
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+        
+    job = get_job_by_id(db, job_id)
+    if not job or not job.products:
+        raise HTTPException(status_code=404, detail="Job has no data to export")
+        
+    data = []
+    import json
+    for p in job.products:
+        try:
+            specs = json.loads(p.specifications) if p.specifications else {}
+        except:
+            specs = {}
+        row = {
+            "Title": p.title,
+            "URL": p.url,
+            "Price": p.price,
+            "Rating": p.rating,
+            "Reviews Count": p.reviews_count,
+            "Brand": p.brand,
+            "Seller": p.seller,
+            "Warranty": p.warranty,
+            "Description": p.description,
+        }
+        if user.role == "superadmin":
+            row["Company"] = p.company_name
+            
+        for k, v in specs.items():
+            row[f"Spec_{k}"] = v
+        data.append(row)
+        
+    df = pd.DataFrame(data)
+    
+    import io
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name="Scraped Products")
+    output.seek(0)
+    
+    filename = f"scraped_data_{job_id[:8]}.xlsx"
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
 
