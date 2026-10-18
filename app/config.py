@@ -37,3 +37,26 @@ USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/120.0",
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15"
 ]
+
+# Website Selectors (Legacy Fallback)
+WEBSITE_SELECTORS = {
+    "amazon": {
+        "product_container": "div[data-component-type='s-search-result'], div.s-result-item",
+        "title": "h2 a, h2 span, h3 a, h3 span",
+        "link": "h2 a, h3 a, a[href*='/dp/']",
+        "price": ".a-price-whole, span.a-price-whole",
+        "rating": "span.a-icon-alt",
+        "reviews_count": "span.a-size-base.s-underline-text, span.a-size-base",
+        "image": "img.s-image"
+    },
+    "generic": {
+        "product_container": "div[class*='product'], div[class*='item'], div[class*='card']",
+        "title": "h2, h3, h4, a[class*='title'], [class*='name']",
+        "link": "a[href*='/product/'], a[href*='/p/'], a[href*='/item/'], a[href*='/dp/']",
+        "price": "[class*='price'], span[class*='price']",
+        "rating": "[class*='rating'], span[class*='rating']",
+        "reviews_count": "[class*='review'], span[class*='review']",
+        "image": "img[class*='image'], img[class*='product']"
+    }
+}
+

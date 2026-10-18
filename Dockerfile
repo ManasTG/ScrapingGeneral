@@ -4,10 +4,15 @@ FROM python:3.10-slim
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
-# Install system dependencies, including tools needed to install Google Chrome
+# Prevent Selenium Manager from trying to download browser binaries over the network at runtime
+ENV SE_AVOID_BROWSER_DOWNLOAD=true
+
+# Install system dependencies, including libraries required by headless Chrome
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
+    wget \
     unzip \
+    ca-certificates \
     libnss3 \
     libnspr4 \
     libasound2 \
@@ -31,15 +36,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     xdg-utils \
     && rm -rf /var/lib/apt/lists/*
 
-# Download and install Google Chrome Stable directly
-RUN curl -LO https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb \
-    && apt-get update \
-    && apt-get install -y ./google-chrome-stable_current_amd64.deb \
-    && rm google-chrome-stable_current_amd64.deb \
-    && rm -rf /var/lib/apt/lists/*
+# Download and install matched Chrome for Testing and ChromeDriver
+RUN LATEST_RELEASE=$(curl -s https://googlechromelabs.github.io/chrome-for-testing/LATEST_RELEASE_STABLE) && \
+    echo "Installing Chrome for Testing and ChromeDriver version: $LATEST_RELEASE" && \
+    curl -sSL "https://storage.googleapis.com/chrome-for-testing-public/${LATEST_RELEASE}/linux64/chrome-linux64.zip" -o /tmp/chrome-linux64.zip && \
+    unzip -q /tmp/chrome-linux64.zip -d /opt && \
+    ln -s /opt/chrome-linux64/chrome /usr/bin/google-chrome && \
+    ln -s /opt/chrome-linux64/chrome /usr/bin/chrome && \
+    curl -sSL "https://storage.googleapis.com/chrome-for-testing-public/${LATEST_RELEASE}/linux64/chromedriver-linux64.zip" -o /tmp/chromedriver-linux64.zip && \
+    unzip -q /tmp/chromedriver-linux64.zip -d /opt && \
+    ln -s /opt/chromedriver-linux64/chromedriver /usr/bin/chromedriver && \
+    chmod +x /opt/chrome-linux64/chrome /opt/chromedriver-linux64/chromedriver /usr/bin/google-chrome /usr/bin/chromedriver && \
+    rm -f /tmp/chrome-linux64.zip /tmp/chromedriver-linux64.zip
 
-# Verify Chrome installation
-RUN google-chrome --version
+# Verify Chrome and ChromeDriver installations
+RUN google-chrome --version && chromedriver --version
 
 WORKDIR /app
 
@@ -53,7 +64,7 @@ COPY . .
 # Create Directories for Databases and static files and set permissions
 RUN mkdir -p Databases static && chmod -R 777 Databases static
 
-# Railway uses the PORT environment variable automatically
+# Cloud environments (Railway, Blitz, Render) provide PORT
 EXPOSE 8000
 
 # Start FastAPI server using Uvicorn

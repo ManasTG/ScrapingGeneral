@@ -1,3 +1,7 @@
+import os
+import sys
+import shutil
+import random
 import time
 import re
 import urllib.parse
@@ -60,21 +64,31 @@ class ProductScraper:
 
     def init_driver(self) -> None:
         self.log("Initializing ChromeDriver...")
+        
+        # Enforce headless mode in Linux environments without a display server
+        is_headless = self.headless
+        if sys.platform.startswith("linux") and "DISPLAY" not in os.environ:
+            is_headless = True
+
         chrome_options = Options()
         
-        if self.headless:
+        if is_headless:
             chrome_options.add_argument("--headless=new")
         
-        # Anti-bot detection measures
+        # Anti-bot detection and container compatibility measures
         chrome_options.add_argument("--disable-gpu")
         chrome_options.add_argument("--no-sandbox")
+        chrome_options.add_argument("--disable-setuid-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
+        chrome_options.add_argument("--disable-software-rasterizer")
         chrome_options.add_argument("--window-size=1920,1080")
         chrome_options.add_argument("--disable-blink-features=AutomationControlled")
         chrome_options.add_argument("--disable-extensions")
+        chrome_options.add_argument("--no-first-run")
+        chrome_options.add_argument("--no-default-browser-check")
+        chrome_options.add_argument("--disable-infobars")
         
         # Pick a random User-Agent
-        import random
         user_agent = random.choice(USER_AGENTS)
         chrome_options.add_argument(f"user-agent={user_agent}")
         
@@ -82,8 +96,42 @@ class ProductScraper:
         chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
         chrome_options.add_experimental_option("useAutomationExtension", False)
 
+        # Detect Chrome binary if available in standard Linux/container locations
+        chrome_binary = None
+        for path in [
+            "/usr/bin/google-chrome",
+            "/usr/bin/chrome",
+            "/usr/bin/google-chrome-stable",
+            "/usr/bin/chromium",
+            "/usr/bin/chromium-browser",
+            "/opt/chrome-linux64/chrome",
+            "/opt/chrome/chrome"
+        ]:
+            if os.path.exists(path):
+                chrome_binary = path
+                break
+        if chrome_binary:
+            chrome_options.binary_location = chrome_binary
+
+        # Detect pre-installed ChromeDriver executable
+        chromedriver_path = None
+        for path in [
+            "/usr/bin/chromedriver",
+            "/usr/local/bin/chromedriver",
+            "/opt/chromedriver-linux64/chromedriver",
+            shutil.which("chromedriver")
+        ]:
+            if path and os.path.exists(path):
+                chromedriver_path = path
+                break
+
         try:
-            self.driver = webdriver.Chrome(options=chrome_options)
+            if chromedriver_path:
+                self.log(f"Using pre-installed ChromeDriver: {chromedriver_path}")
+                service = Service(executable_path=chromedriver_path)
+                self.driver = webdriver.Chrome(service=service, options=chrome_options)
+            else:
+                self.driver = webdriver.Chrome(options=chrome_options)
             
             # Execute CDP command to override navigator.webdriver and user agent at network layer
             self.driver.execute_cdp_cmd(
