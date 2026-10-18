@@ -1204,3 +1204,50 @@ body {
     transition: box-shadow 0.3s ease;
 }
 
+/* ============================================================
+   Google Maps Location Fields — animated reveal
+   ============================================================ */
+@keyframes slideDownFade {
+    from {
+        opacity: 0;
+        transform: translateY(-8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+#gmaps-location-fields {
+    animation: slideDownFade 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+    border-left: 3px solid #1a73e8;
+    padding-left: 12px;
+    margin-top: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+/* Google Maps badge on presets */
+.gmaps-preset-badge {
+    background: linear-gradient(135deg, #1a73e8 0%, #0d47a1 100%) !important;
+    color: #fff !important;
+    border-color: #1a73e8 !important;
+}
+
+/* optgroup label styling */
+select optgroup {
+    font-weight: 600;
+    color: var(--mute);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+select optgroup option {
+    font-weight: 400;
+    text-transform: none;
+    letter-spacing: 0;
+    color: var(--ink);
+}
+

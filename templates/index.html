@@ -11,7 +11,7 @@
     <!-- FontAwesome for some standard icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- CSS Stylesheet -->
-    <link rel="stylesheet" href="/static/style.css?v=10">
+    <link rel="stylesheet" href="/static/style.css?v=11">
     <style>
         .user-badge-premium {
             background-color: var(--primary);
@@ -128,28 +128,54 @@
                                 <div class="input-wrapper">
                                     <i class="fa-solid fa-globe input-icon"></i>
                                     <select id="input-website" class="form-input" required>
-                                        <option value="amazon">Amazon</option>
-                                        <option value="flipkart">Flipkart</option>
-                                        <option value="bigbasket">BigBasket</option>
-                                        <option value="blinkit" disabled>Blinkit (Soon)</option>
-                                        <option value="zepto">Zepto</option>
-                                        <option value="nykaa">Nykaa</option>
-                                        <option value="myntra">Myntra</option>
-                                        <option value="jiomart">JioMart</option>
-                                        <option value="purplle">Purplle</option>
-                                        <option value="tira">Tira</option>
-                                        <option value="kult">Kult</option>
-                                        <option value="smytten">Smytten</option>
-                                        <option value="alibaba">Alibaba</option>
+                                        <optgroup label="🗺️ Maps & Local">
+                                            <option value="googlemaps">Google Maps</option>
+                                        </optgroup>
+                                        <optgroup label="🛒 E-Commerce">
+                                            <option value="amazon">Amazon</option>
+                                            <option value="flipkart">Flipkart</option>
+                                            <option value="bigbasket">BigBasket</option>
+                                            <option value="blinkit" disabled>Blinkit (Soon)</option>
+                                            <option value="zepto">Zepto</option>
+                                            <option value="nykaa">Nykaa</option>
+                                            <option value="myntra">Myntra</option>
+                                            <option value="jiomart">JioMart</option>
+                                            <option value="purplle">Purplle</option>
+                                            <option value="tira">Tira</option>
+                                            <option value="kult">Kult</option>
+                                            <option value="smytten">Smytten</option>
+                                            <option value="alibaba">Alibaba</option>
+                                        </optgroup>
                                     </select>
                                 </div>
                             </div>
 
-                            <div class="form-group">
-                                <label for="input-search" class="form-label">Search Query</label>
+                            <div class="form-group" id="search-query-group">
+                                <label for="input-search" class="form-label" id="input-search-label">Search Query</label>
                                 <div class="input-wrapper">
                                     <i class="fa-solid fa-magnifying-glass input-icon"></i>
                                     <input type="text" id="input-search" class="form-input" placeholder="e.g. Dell Laptops" required value="Dell Laptops">
+                                </div>
+                            </div>
+
+                            <!-- Google Maps Location Fields (shown only when Google Maps is selected) -->
+                            <div id="gmaps-location-fields" style="display: none;">
+                                <div class="form-group">
+                                    <label for="input-gmaps-city" class="form-label">City</label>
+                                    <div class="input-wrapper">
+                                        <i class="fa-solid fa-city input-icon"></i>
+                                        <input type="text" id="input-gmaps-city" class="form-input" placeholder="e.g. New York" value="New York">
+                                    </div>
+                                </div>
+                                <div class="form-row" style="margin-top: 0;">
+                                    <div class="form-group half">
+                                        <label for="input-gmaps-state" class="form-label">State / Province</label>
+                                        <input type="text" id="input-gmaps-state" class="form-input-sm" placeholder="e.g. New York" value="New York">
+                                    </div>
+                                    <div class="form-group half">
+                                        <label for="input-gmaps-country" class="form-label">Country</label>
+                                        <input type="text" id="input-gmaps-country" class="form-input-sm" placeholder="e.g. USA" value="USA">
+                                    </div>
                                 </div>
                             </div>
 
@@ -183,6 +209,12 @@
                         <div class="presets-section">
                             <span class="caption-mono">QUICK PRESETS</span>
                             <div class="presets-buttons">
+                                <button class="badge-secondary preset-btn" data-site="googlemaps" data-query="Coffee Shops" data-limit="5" data-gmaps-city="Seattle" data-gmaps-state="Washington" data-gmaps-country="USA" style="background: linear-gradient(135deg, #1a73e8 0%, #0d47a1 100%); color: #fff; border-color: #1a73e8;">
+                                    <i class="fa-brands fa-google" style="font-size: 10px;"></i> Maps: Coffee Shops Seattle
+                                </button>
+                                <button class="badge-secondary preset-btn" data-site="googlemaps" data-query="Restaurants" data-limit="5" data-gmaps-city="New York" data-gmaps-state="New York" data-gmaps-country="USA" style="background: linear-gradient(135deg, #1a73e8 0%, #0d47a1 100%); color: #fff; border-color: #1a73e8;">
+                                    <i class="fa-brands fa-google" style="font-size: 10px;"></i> Maps: Restaurants NYC
+                                </button>
                                 <button class="badge-secondary preset-btn" data-site="amazon" data-query="Dell Laptops" data-limit="5">
                                     Amazon Dell Laptops (5)
                                 </button>
@@ -292,6 +324,7 @@
                                     <i class="fa-solid fa-globe input-icon"></i>
                                     <select id="saas-filter-website" class="form-input">
                                         <option value="all">All Websites</option>
+                                        <option value="googlemaps">Google Maps</option>
                                         <option value="amazon">Amazon</option>
                                         <option value="flipkart">Flipkart</option>
                                         <option value="bigbasket">BigBasket</option>
@@ -642,7 +675,7 @@
     </div>
 
     <!-- App Frontend JS -->
-    <script src="/static/app.js?v=10"></script>
+    <script src="/static/app.js?v=11"></script>
 </body>
 </html>
 

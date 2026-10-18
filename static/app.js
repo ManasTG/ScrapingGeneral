@@ -18,6 +18,13 @@ const resultsContainer = document.getElementById("results-container");
 const resultsTableBody = document.getElementById("results-table-body");
 const historyTableBody = document.getElementById("history-table-body");
 
+// Google Maps specific DOM elements
+const gmapsLocationFields = document.getElementById("gmaps-location-fields");
+const inputGmapsCity = document.getElementById("input-gmaps-city");
+const inputGmapsState = document.getElementById("input-gmaps-state");
+const inputGmapsCountry = document.getElementById("input-gmaps-country");
+const inputSearchLabel = document.getElementById("input-search-label");
+
 // SaaS UI elements
 const loginContainer = document.getElementById("login-container");
 const loginForm = document.getElementById("login-form");
@@ -95,6 +102,11 @@ function setupEventListeners() {
     // SuperAdmin Forms
     createCompanyForm.addEventListener("submit", handleCreateCompanySubmit);
     
+    // Website selector change → show/hide Google Maps location fields
+    inputWebsite.addEventListener("change", handleWebsiteChange);
+    // Run once on load to sync initial state
+    handleWebsiteChange();
+
     // Presets
     document.querySelectorAll(".preset-btn").forEach(btn => {
         btn.addEventListener("click", (e) => {
@@ -102,6 +114,11 @@ function setupEventListeners() {
             inputWebsite.value = dataset.site;
             inputSearch.value = dataset.query;
             inputLimit.value = dataset.limit;
+            // Google Maps location fields
+            if (inputGmapsCity) inputGmapsCity.value = dataset.gmapsCity || "";
+            if (inputGmapsState) inputGmapsState.value = dataset.gmapsState || "";
+            if (inputGmapsCountry) inputGmapsCountry.value = dataset.gmapsCountry || "";
+            handleWebsiteChange();
         });
     });
 
@@ -515,15 +532,48 @@ function updateThemeButton(theme) {
     }
 }
 
+// Handle website dropdown change — show/hide Google Maps fields
+function handleWebsiteChange() {
+    const isGoogleMaps = inputWebsite.value === "googlemaps";
+    if (gmapsLocationFields) {
+        gmapsLocationFields.style.display = isGoogleMaps ? "block" : "none";
+    }
+    if (inputSearchLabel) {
+        inputSearchLabel.textContent = isGoogleMaps ? "Business Type / Search Term" : "Search Query";
+    }
+    if (inputSearch) {
+        if (isGoogleMaps) {
+            inputSearch.placeholder = "e.g. Coffee Shops, Dentists, Hotels, Gyms";
+            if (!inputSearch.dataset.gmapsSet) {
+                inputSearch.value = "Coffee Shops";
+                inputSearch.dataset.gmapsSet = "1";
+            }
+        } else {
+            inputSearch.placeholder = "e.g. Dell Laptops";
+            delete inputSearch.dataset.gmapsSet;
+        }
+    }
+}
+
 // Start Scraper Job
 async function handleFormSubmit(e) {
     e.preventDefault();
     
     const website = inputWebsite.value.trim();
-    const search_query = inputSearch.value.trim();
+    let search_query = inputSearch.value.trim();
     const limit = parseInt(inputLimit.value);
     const headless = inputHeadless.checked;
     
+    // For Google Maps, compose the full location-aware search query
+    if (website === "googlemaps") {
+        const city = (inputGmapsCity ? inputGmapsCity.value.trim() : "");
+        const state = (inputGmapsState ? inputGmapsState.value.trim() : "");
+        const country = (inputGmapsCountry ? inputGmapsCountry.value.trim() : "");
+        const locationParts = [city, state, country].filter(Boolean);
+        if (locationParts.length > 0) {
+            search_query = `${search_query} in ${locationParts.join(", ")}`;
+        }
+    }
     // Reset layout
     terminalLogs.innerHTML = "";
     progressBar.style.width = "0%";
@@ -938,6 +988,9 @@ function toggleInputs(disabled) {
     inputLimit.disabled = disabled;
     inputHeadless.disabled = disabled;
     btnSubmit.disabled = disabled;
+    if (inputGmapsCity) inputGmapsCity.disabled = disabled;
+    if (inputGmapsState) inputGmapsState.disabled = disabled;
+    if (inputGmapsCountry) inputGmapsCountry.disabled = disabled;
     
     document.querySelectorAll(".preset-btn").forEach(btn => {
         btn.disabled = disabled;
