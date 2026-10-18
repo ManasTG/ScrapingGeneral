@@ -1,0 +1,79 @@
+# ==========================================
+# Python Bytecode & Runtime Caches
+# ==========================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyd
+*.so
+.pytest_cache/
+.ipynb_checkpoints/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# ==========================================
+# Virtual Environments
+# ==========================================
+venv/
+.venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# ==========================================
+# Local Databases & State
+# ==========================================
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+Databases/*.db
+Databases/*.sqlite3
+!Databases/.gitkeep
+
+# ==========================================
+# Scraped Output, Debug Screenshots & Logs
+# ==========================================
+*.log
+logs/
+static/*.png
+static/*.jpg
+static/*.jpeg
+!static/logo.*
+*.csv
+*.xlsx
+test_write.txt
+
+# ==========================================
+# Secrets & Environment Variables
+# ==========================================
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# ==========================================
+# Operating System & IDE Files
+# ==========================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*.sublime-workspace
+.DS_Store
+Thumbs.db
+desktop.ini
+.gemini/
+.agents/
+
+# ==========================================
+# Selenium & Browser Automation Artifacts
+# ==========================================
+chromedriver
+chromedriver.exe
+geckodriver
+geckodriver.exe
+.cache/
