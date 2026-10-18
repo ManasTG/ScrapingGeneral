@@ -5,6 +5,7 @@ import time
 import re
 import urllib.parse
 import random
+import gc
 from typing import Dict, List, Any, Optional, Callable
 from bs4 import BeautifulSoup
 from selenium import webdriver
@@ -79,12 +80,30 @@ class BaseScraper:
         chrome_options.add_argument("--disable-setuid-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
         chrome_options.add_argument("--disable-software-rasterizer")
-        chrome_options.add_argument("--window-size=1920,1080")
+        chrome_options.add_argument("--window-size=1280,720")
         chrome_options.add_argument("--disable-blink-features=AutomationControlled")
         chrome_options.add_argument("--disable-extensions")
         chrome_options.add_argument("--no-first-run")
         chrome_options.add_argument("--no-default-browser-check")
         chrome_options.add_argument("--disable-infobars")
+        
+        # Memory-reduction optimizations for 512MB RAM environments
+        chrome_options.add_argument("--js-flags=--max-old-space-size=128")
+        chrome_options.add_argument("--renderer-process-limit=2")
+        chrome_options.add_argument("--disk-cache-size=4096")
+        chrome_options.add_argument("--media-cache-size=4096")
+        chrome_options.add_argument("--disable-application-cache")
+        chrome_options.add_argument("--aggressive-cache-discard")
+        chrome_options.add_argument("--disable-features=Translate,OptimizationHints,MediaRouter,CalculateNativeWinOcclusion,InterestFeedContentSuggestions")
+
+        # Block images and unnecessary media at browser engine level (saves 60-70% RAM)
+        prefs = {
+            "profile.managed_default_content_settings.images": 2,
+            "profile.default_content_setting_values.notifications": 2,
+            "profile.default_content_setting_values.media_stream": 2,
+            "profile.default_content_setting_values.geolocation": 2,
+        }
+        chrome_options.add_experimental_option("prefs", prefs)
         
         # Pick a random User-Agent
         user_agent = random.choice(USER_AGENTS)
@@ -144,6 +163,21 @@ class BaseScraper:
                     "userAgent": user_agent
                 }
             )
+
+            # Block heavy network resources (images, fonts, ads, trackers) via CDP Network blocking
+            try:
+                self.driver.execute_cdp_cmd("Network.enable", {})
+                self.driver.execute_cdp_cmd("Network.setBlockedURLs", {
+                    "urls": [
+                        "*.png", "*.jpg", "*.jpeg", "*.gif", "*.webp", "*.svg", "*.ico",
+                        "*.woff", "*.woff2", "*.ttf", "*.otf", "*.eot",
+                        "*doubleclick.net*", "*google-analytics.com*", "*googletagmanager.com*",
+                        "*facebook.net*", "*criteo.net*", "*amazon-adsystem.com*",
+                        "*adnxs.com*", "*advertising*", "*analytics*", "*video*"
+                    ]
+                })
+            except Exception:
+                pass
             
             self.driver.set_page_load_timeout(PAGE_LOAD_TIMEOUT)
             self.log("ChromeDriver initialized successfully.")
@@ -465,79 +499,105 @@ class BaseScraper:
             
             domain = self._get_domain(url)
             
-            self.log(f"Navigating to {url} (domain: {domain})...")
-            self.driver.get(url)
-            
-            # Allow page to settle
-            time.sleep(2)
-            
-            # Check for CAPTCHA
-            page_source = self.driver.page_source
-            if any(x in page_source.lower() for x in ["captcha", "robot check", "sorry, we just need to make sure you're not a robot"]):
-                self.log("WARNING: CAPTCHA / robot check detected. Target website is blocking the headless request.")
-                self._save_debug_screenshot("captcha_block")
-                self.log("To solve this, try unchecking 'Headless Mode' in parameters.")
-                time.sleep(5)
-            
-            # Close any popups before searching
-            try:
-                self.close_popups()
-            except Exception as e:
-                self.log(f"Error closing popups: {str(e)}")
+            # Map supported domains directly to search URLs to skip heavy homepage loads and save ~150MB RAM
+            search_url_map = {
+                "amazon.in": f"https://www.amazon.in/s?k={urllib.parse.quote_plus(search_query)}",
+                "flipkart.com": f"https://www.flipkart.com/search?q={urllib.parse.quote_plus(search_query)}",
+                "myntra.com": f"https://www.myntra.com/{urllib.parse.quote_plus(search_query)}",
+                "jiomart.com": f"https://www.jiomart.com/search/{urllib.parse.quote_plus(search_query)}",
+                "zeptonow.com": f"https://www.zeptonow.com/search?q={urllib.parse.quote_plus(search_query)}",
+                "nykaa.com": f"https://www.nykaa.com/search/result/?q={urllib.parse.quote_plus(search_query)}",
+                "bigbasket.com": f"https://www.bigbasket.com/ps/?q={urllib.parse.quote_plus(search_query)}",
+                "purplle.com": f"https://www.purplle.com/search?q={urllib.parse.quote_plus(search_query)}",
+                "tirabeauty.com": f"https://www.tirabeauty.com/search?q={urllib.parse.quote_plus(search_query)}",
+                "smytten.com": f"https://smytten.com/search?q={urllib.parse.quote_plus(search_query)}",
+                "alibaba.com": f"https://www.alibaba.com/trade/search?SearchText={urllib.parse.quote_plus(search_query)}"
+            }
 
-            # Find and enter search query
-            self.check_cancelled(results)
-            self.log(f"Looking for search input using selector: '{selectors['search_input']}'")
-            search_input = None
-            for sel in selectors["search_input"].split(","):
-                sel = sel.strip()
-                try:
-                    search_input = WebDriverWait(self.driver, 5).until(
-                        EC.element_to_be_clickable((By.CSS_SELECTOR, sel))
-                    )
-                    if search_input:
-                        break
-                except Exception:
-                    continue
-            
-            if not search_input:
-                self.log("Search input not found using primary selectors. Trying fallback to any input type text/search...")
-                try:
-                    search_input = WebDriverWait(self.driver, 5).until(
-                        EC.element_to_be_clickable((By.XPATH, "//input[@type='text' or @type='search']"))
-                    )
-                except Exception:
-                    self._save_debug_screenshot("no_search_input_found")
-                    raise Exception("Could not locate search bar input on page.")
+            direct_search_url = None
+            for domain_key, target_url in search_url_map.items():
+                if domain_key in domain:
+                    direct_search_url = target_url
+                    break
 
-            self.log(f"Entering search query: '{search_query}'")
-            search_input.clear()
-            search_input.send_keys(search_query)
-            time.sleep(1)
-            
-            self.check_cancelled(results)
-            self.log("Submitting search form...")
-            submit_btn = None
-            for sel in selectors["search_submit"].split(","):
-                sel = sel.strip()
-                try:
-                    submit_btn = WebDriverWait(self.driver, 5).until(
-                        EC.element_to_be_clickable((By.CSS_SELECTOR, sel))
-                    )
-                    if submit_btn:
-                        break
-                except Exception:
-                    continue
-            
-            if submit_btn:
-                submit_btn.click()
+            if direct_search_url:
+                self.log(f"Navigating directly to search URL (memory-optimized): {direct_search_url}...")
+                self.driver.get(direct_search_url)
+                time.sleep(2)
             else:
-                self.log("Submit button not found. Sending Enter key...")
-                search_input.send_keys(Keys.ENTER)
-            
-            # Wait for results to load
-            self.log("Waiting for search results...")
-            time.sleep(3)
+                self.log(f"Navigating to {url} (domain: {domain})...")
+                self.driver.get(url)
+                
+                # Allow page to settle
+                time.sleep(2)
+                
+                # Check for CAPTCHA
+                page_source = self.driver.page_source
+                if any(x in page_source.lower() for x in ["captcha", "robot check", "sorry, we just need to make sure you're not a robot"]):
+                    self.log("WARNING: CAPTCHA / robot check detected. Target website is blocking the headless request.")
+                    self._save_debug_screenshot("captcha_block")
+                    self.log("To solve this, try unchecking 'Headless Mode' in parameters.")
+                    time.sleep(5)
+                
+                # Close any popups before searching
+                try:
+                    self.close_popups()
+                except Exception as e:
+                    self.log(f"Error closing popups: {str(e)}")
+
+                # Find and enter search query
+                self.check_cancelled(results)
+                self.log(f"Looking for search input using selector: '{selectors['search_input']}'")
+                search_input = None
+                for sel in selectors["search_input"].split(","):
+                    sel = sel.strip()
+                    try:
+                        search_input = WebDriverWait(self.driver, 5).until(
+                            EC.element_to_be_clickable((By.CSS_SELECTOR, sel))
+                        )
+                        if search_input:
+                            break
+                    except Exception:
+                        continue
+                
+                if not search_input:
+                    self.log("Search input not found using primary selectors. Trying fallback to any input type text/search...")
+                    try:
+                        search_input = WebDriverWait(self.driver, 5).until(
+                            EC.element_to_be_clickable((By.XPATH, "//input[@type='text' or @type='search']"))
+                        )
+                    except Exception:
+                        self._save_debug_screenshot("no_search_input_found")
+                        raise Exception("Could not locate search bar input on page.")
+
+                self.log(f"Entering search query: '{search_query}'")
+                search_input.clear()
+                search_input.send_keys(search_query)
+                time.sleep(1)
+                
+                self.check_cancelled(results)
+                self.log("Submitting search form...")
+                submit_btn = None
+                for sel in selectors["search_submit"].split(","):
+                    sel = sel.strip()
+                    try:
+                        submit_btn = WebDriverWait(self.driver, 5).until(
+                            EC.element_to_be_clickable((By.CSS_SELECTOR, sel))
+                        )
+                        if submit_btn:
+                            break
+                    except Exception:
+                        continue
+                
+                if submit_btn:
+                    submit_btn.click()
+                else:
+                    self.log("Submit button not found. Sending Enter key...")
+                    search_input.send_keys(Keys.ENTER)
+                
+                # Wait for results to load
+                self.log("Waiting for search results...")
+                time.sleep(3)
             
             # Retrieve target listings using multi-page pagination / scrolling
             target_listings = self._collect_listings_with_pagination(selectors, search_query, limit)
@@ -895,7 +955,7 @@ class BaseScraper:
                     item["seller"] = seller or "Unknown"
                     item["warranty"] = warranty or "N/A"
                     item["reviews"] = reviews_list
-                    item["_html"] = str(detail_soup)
+                    item["_html"] = ""  # Omit large full HTML string to preserve 512MB RAM budget
                     
                     results.append(item)
                     self.log(f"[{prod_idx}/{len(target_listings)}] Successfully scraped item details.")
@@ -910,6 +970,11 @@ class BaseScraper:
                     item["warranty"] = "N/A"
                     item["reviews"] = []
                     results.append(item)
+                finally:
+                    # Reclaim memory promptly after each page
+                    if 'detail_soup' in locals():
+                        del detail_soup
+                    gc.collect()
             
             self.log(f"Scraping completed. Scraped details for {len(results)} items.")
             

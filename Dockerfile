@@ -4,6 +4,10 @@ FROM python:3.10-slim
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
+# Memory allocation tuning for 512MB RAM containers
+ENV MALLOC_ARENA_MAX=2
+ENV MALLOC_TRIM_THRESHOLD_=100000
+
 # Prevent Selenium Manager from trying to download browser binaries over the network at runtime
 ENV SE_AVOID_BROWSER_DOWNLOAD=true
 

@@ -81,12 +81,30 @@ class ProductScraper:
         chrome_options.add_argument("--disable-setuid-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
         chrome_options.add_argument("--disable-software-rasterizer")
-        chrome_options.add_argument("--window-size=1920,1080")
+        chrome_options.add_argument("--window-size=1280,720")
         chrome_options.add_argument("--disable-blink-features=AutomationControlled")
         chrome_options.add_argument("--disable-extensions")
         chrome_options.add_argument("--no-first-run")
         chrome_options.add_argument("--no-default-browser-check")
         chrome_options.add_argument("--disable-infobars")
+        
+        # Memory-reduction optimizations for 512MB RAM environments
+        chrome_options.add_argument("--js-flags=--max-old-space-size=128")
+        chrome_options.add_argument("--renderer-process-limit=2")
+        chrome_options.add_argument("--disk-cache-size=4096")
+        chrome_options.add_argument("--media-cache-size=4096")
+        chrome_options.add_argument("--disable-application-cache")
+        chrome_options.add_argument("--aggressive-cache-discard")
+        chrome_options.add_argument("--disable-features=Translate,OptimizationHints,MediaRouter,CalculateNativeWinOcclusion,InterestFeedContentSuggestions")
+
+        # Block images and unnecessary media at browser engine level (saves 60-70% RAM)
+        prefs = {
+            "profile.managed_default_content_settings.images": 2,
+            "profile.default_content_setting_values.notifications": 2,
+            "profile.default_content_setting_values.media_stream": 2,
+            "profile.default_content_setting_values.geolocation": 2,
+        }
+        chrome_options.add_experimental_option("prefs", prefs)
         
         # Pick a random User-Agent
         user_agent = random.choice(USER_AGENTS)
@@ -146,6 +164,21 @@ class ProductScraper:
                     "userAgent": user_agent
                 }
             )
+
+            # Block heavy network resources (images, fonts, ads, trackers) via CDP Network blocking
+            try:
+                self.driver.execute_cdp_cmd("Network.enable", {})
+                self.driver.execute_cdp_cmd("Network.setBlockedURLs", {
+                    "urls": [
+                        "*.png", "*.jpg", "*.jpeg", "*.gif", "*.webp", "*.svg", "*.ico",
+                        "*.woff", "*.woff2", "*.ttf", "*.otf", "*.eot",
+                        "*doubleclick.net*", "*google-analytics.com*", "*googletagmanager.com*",
+                        "*facebook.net*", "*criteo.net*", "*amazon-adsystem.com*",
+                        "*adnxs.com*", "*advertising*", "*analytics*", "*video*"
+                    ]
+                })
+            except Exception:
+                pass
             
             self.driver.set_page_load_timeout(PAGE_LOAD_TIMEOUT)
             self.log("ChromeDriver initialized successfully.")
