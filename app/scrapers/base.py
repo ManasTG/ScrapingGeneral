@@ -147,6 +147,14 @@ class BaseScraper:
         is_headless = self.headless
         if sys.platform.startswith("linux") and "DISPLAY" not in os.environ:
             is_headless = True
+
+        # Set environment variables BEFORE creating the driver — critical for containers
+        if is_headless:
+            os.environ["MOZ_HEADLESS"] = "1"  # More reliable than -headless arg in ESR
+        # Prevent crash reporter from hanging the process in headless/container envs
+        os.environ["MOZ_CRASHREPORTER_DISABLE"] = "1"
+        # Disable IPC shared-memory transport when /dev/shm is too small (common in containers)
+        os.environ.setdefault("MOZ_DISABLE_CONTENT_SANDBOX", "1")
             
         firefox_options = FirefoxOptions()
         firefox_options.binary_location = firefox_binary
@@ -154,6 +162,16 @@ class BaseScraper:
         
         if is_headless:
             firefox_options.add_argument("-headless")
+
+        # Container-critical flags (fixes "Failed to read marionette port" in Docker/cloud)
+        firefox_options.add_argument("--no-remote")     # Prevent IPC clashes in containers
+        firefox_options.add_argument("--disable-gpu")   # No GPU in headless containers
+
+        # Explicit tmp profile directory to avoid /tmp permission issues in some cloud envs
+        import tempfile
+        profile_dir = tempfile.mkdtemp(prefix="ff_profile_")
+        firefox_options.add_argument(f"-profile")
+        firefox_options.add_argument(profile_dir)
             
         # Low-memory optimizations for < 512MB RAM environments
         # 1. Block images at engine level to save ~60-70% RAM
@@ -168,6 +186,8 @@ class BaseScraper:
         # 3. Limit content processes (single IPC content process significantly saves RAM)
         firefox_options.set_preference("dom.ipc.processCount", 1)
         firefox_options.set_preference("browser.tabs.remote.separatePrivilegedContentProcess", False)
+        # Disable Fission (site-isolation) to save memory and avoid multi-process issues
+        firefox_options.set_preference("fission.autostart", False)
         
         # 4. Aggressive memory & cache management
         firefox_options.set_preference("browser.cache.disk.enable", False)
@@ -180,6 +200,10 @@ class BaseScraper:
         firefox_options.set_preference("webgl.disabled", True)
         firefox_options.set_preference("layers.acceleration.disabled", True)
         firefox_options.set_preference("gfx.direct2d.disabled", True)
+
+        # 6. Marionette connection stability — longer timeout for slow container starts
+        firefox_options.set_preference("marionette.port", 0)  # Let OS pick a free port
+        firefox_options.set_preference("toolkit.startup.max_resumed_crashes", -1)
         
         # Stealth & Anti-bot detection
         user_agent = random.choice(USER_AGENTS)
@@ -193,12 +217,28 @@ class BaseScraper:
             
         # Detect pre-installed Geckodriver executable
         geckodriver_path = self._find_geckodriver()
+
+        # Build Geckodriver service with extended connection timeout
+        service_args = ["--log", "warn"]
         if geckodriver_path:
             self.log(f"Using pre-installed Geckodriver: {geckodriver_path}")
-            service = FirefoxService(executable_path=geckodriver_path)
-            self.driver = webdriver.Firefox(service=service, options=firefox_options)
+            service = FirefoxService(
+                executable_path=geckodriver_path,
+                service_args=service_args
+            )
         else:
-            self.driver = webdriver.Firefox(options=firefox_options)
+            service = FirefoxService(service_args=service_args)
+
+        try:
+            self.driver = webdriver.Firefox(service=service, options=firefox_options)
+        except Exception as e:
+            # Clean up temp profile on failure
+            import shutil as _shutil
+            try:
+                _shutil.rmtree(profile_dir, ignore_errors=True)
+            except Exception:
+                pass
+            raise e
             
         self.driver.set_page_load_timeout(PAGE_LOAD_TIMEOUT)
         self.log("Firefox ESR (Gecko) initialized successfully as primary browser.")

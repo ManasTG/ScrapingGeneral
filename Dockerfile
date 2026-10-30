@@ -11,6 +11,11 @@ ENV MALLOC_TRIM_THRESHOLD_=100000
 # Prevent Selenium Manager from trying to download browser binaries over the network at runtime
 ENV SE_AVOID_BROWSER_DOWNLOAD=true
 
+# Firefox ESR container stability — prevents "Failed to read marionette port" errors
+ENV MOZ_HEADLESS=1
+ENV MOZ_CRASHREPORTER_DISABLE=1
+ENV MOZ_DISABLE_CONTENT_SANDBOX=1
+
 # Install system dependencies, including libraries required by headless Chrome and Firefox ESR
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
@@ -20,6 +25,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     bzip2 \
     ca-certificates \
     firefox-esr \
+    dbus \
     libnss3 \
     libnspr4 \
     libasound2 \
@@ -42,6 +48,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxtst6 \
     xdg-utils \
     && rm -rf /var/lib/apt/lists/*
+
+# Ensure /dev/shm exists and /tmp is writable (required by Firefox ESR for marionette IPC)
+RUN mkdir -p /dev/shm /tmp/mozilla && chmod 1777 /dev/shm /tmp /tmp/mozilla
 
 # Download and install Geckodriver for Firefox ESR (Primary lightweight browser)
 RUN GECKODRIVER_VERSION=v0.35.0 && \
@@ -80,8 +89,12 @@ COPY . .
 # Create Directories for Databases and static files and set permissions
 RUN mkdir -p Databases static && chmod -R 777 Databases static
 
+# Set TMPDIR for Firefox profile creation in cloud environments
+ENV TMPDIR=/tmp/mozilla
+
 # Cloud environments (Railway, Blitz, Render) provide PORT
 EXPOSE 8000
 
 # Start FastAPI server using Uvicorn
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+# The dbus-daemon init prevents Firefox "Failed to open connection" IPC warnings
+CMD ["sh", "-c", "mkdir -p /dev/shm /tmp/mozilla && chmod 1777 /dev/shm /tmp/mozilla 2>/dev/null; dbus-daemon --system --nofork &>/dev/null & uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
