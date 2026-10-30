@@ -11,12 +11,15 @@ ENV MALLOC_TRIM_THRESHOLD_=100000
 # Prevent Selenium Manager from trying to download browser binaries over the network at runtime
 ENV SE_AVOID_BROWSER_DOWNLOAD=true
 
-# Install system dependencies, including libraries required by headless Chrome
+# Install system dependencies, including libraries required by headless Chrome and Firefox ESR
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     wget \
     unzip \
+    tar \
+    bzip2 \
     ca-certificates \
+    firefox-esr \
     libnss3 \
     libnspr4 \
     libasound2 \
@@ -40,7 +43,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     xdg-utils \
     && rm -rf /var/lib/apt/lists/*
 
-# Download and install matched Chrome for Testing and ChromeDriver
+# Download and install Geckodriver for Firefox ESR (Primary lightweight browser)
+RUN GECKODRIVER_VERSION=v0.35.0 && \
+    echo "Installing Geckodriver version: $GECKODRIVER_VERSION" && \
+    curl -sSL "https://github.com/mozilla/geckodriver/releases/download/${GECKODRIVER_VERSION}/geckodriver-${GECKODRIVER_VERSION}-linux64.tar.gz" -o /tmp/geckodriver.tar.gz && \
+    tar -xzf /tmp/geckodriver.tar.gz -C /usr/local/bin/ && \
+    ln -s /usr/local/bin/geckodriver /usr/bin/geckodriver && \
+    chmod +x /usr/local/bin/geckodriver /usr/bin/geckodriver && \
+    rm -f /tmp/geckodriver.tar.gz
+
+# Download and install matched Chrome for Testing and ChromeDriver (Fallback browser)
 RUN LATEST_RELEASE=$(curl -s https://googlechromelabs.github.io/chrome-for-testing/LATEST_RELEASE_STABLE) && \
     echo "Installing Chrome for Testing and ChromeDriver version: $LATEST_RELEASE" && \
     curl -sSL "https://storage.googleapis.com/chrome-for-testing-public/${LATEST_RELEASE}/linux64/chrome-linux64.zip" -o /tmp/chrome-linux64.zip && \
@@ -53,8 +65,8 @@ RUN LATEST_RELEASE=$(curl -s https://googlechromelabs.github.io/chrome-for-testi
     chmod +x /opt/chrome-linux64/chrome /opt/chromedriver-linux64/chromedriver /usr/bin/google-chrome /usr/bin/chromedriver && \
     rm -f /tmp/chrome-linux64.zip /tmp/chromedriver-linux64.zip
 
-# Verify Chrome and ChromeDriver installations
-RUN google-chrome --version && chromedriver --version
+# Verify Firefox ESR, Geckodriver, Chrome, and ChromeDriver installations
+RUN firefox-esr --version && geckodriver --version && google-chrome --version && chromedriver --version
 
 WORKDIR /app
 

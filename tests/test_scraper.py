@@ -83,9 +83,23 @@ DETAIL_PAGE_HTML = """
 </div>
 """
 
+@patch.object(BaseScraper, "_find_firefox_binary", return_value="/usr/bin/firefox-esr")
+@patch("selenium.webdriver.Firefox")
+def test_firefox_driver_initialization(mock_firefox, mock_find_binary):
+    """Test that Firefox ESR driver is initialized as primary browser with low-memory settings."""
+    scraper = BaseScraper("test-job-123", headless=True)
+    scraper._init_firefox_driver()
+    
+    assert mock_firefox.called
+    options = mock_firefox.call_args[1]["options"]
+    assert "-headless" in options.arguments
+    assert options.preferences.get("permissions.default.image") == 2
+    assert options.preferences.get("dom.ipc.processCount") == 1
+    assert options.preferences.get("browser.cache.disk.enable") is False
+
 @patch("selenium.webdriver.Chrome")
-def test_driver_initialization(mock_chrome):
-    """Test that ChromeDriver is initialized with proper arguments."""
+def test_driver_fallback_to_chrome(mock_chrome):
+    """Test that when Firefox fails or is missing, it automatically falls back to Chrome."""
     scraper = BaseScraper("test-job-123", headless=True)
     scraper.init_driver()
     
@@ -134,6 +148,7 @@ def test_scraper_extracts_listings(mock_chrome):
     mock_chrome.return_value = driver_instance
     
     driver_instance.page_source = SEARCH_PAGE_HTML
+    driver_instance.current_url = "https://www.amazon.in"
     
     scraper = AmazonScraper("test-job-456", headless=True)
     
@@ -146,7 +161,10 @@ def test_scraper_extracts_listings(mock_chrome):
         scraper.wait_for_element = MagicMock()
         
         def mock_get(url):
-            driver_instance.page_source = DETAIL_PAGE_HTML
+            if "/dp/" in str(url) or "/gp/" in str(url) or "product" in str(url):
+                driver_instance.page_source = DETAIL_PAGE_HTML
+            else:
+                driver_instance.page_source = SEARCH_PAGE_HTML
             
         driver_instance.get.side_effect = mock_get
         

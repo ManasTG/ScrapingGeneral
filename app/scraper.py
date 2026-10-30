@@ -8,11 +8,17 @@ import urllib.parse
 from typing import Dict, List, Any, Optional, Callable
 from bs4 import BeautifulSoup
 from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service as ChromeService
+from selenium.webdriver.chrome.options import Options as ChromeOptions
+from selenium.webdriver.firefox.service import Service as FirefoxService
+from selenium.webdriver.firefox.options import Options as FirefoxOptions
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+
+# Backward compatibility aliases
+Service = ChromeService
+Options = ChromeOptions
 from app.config import WEBSITE_SELECTORS, USER_AGENTS, SELENIUM_TIMEOUT, PAGE_LOAD_TIMEOUT
 
 class ScrapeCancelledException(Exception):
@@ -62,15 +68,152 @@ class ProductScraper:
             except Exception as e:
                 self.log(f"Failed to save debug screenshot: {str(e)}")
 
-    def init_driver(self) -> None:
-        self.log("Initializing ChromeDriver...")
+    def _find_firefox_binary(self) -> Optional[str]:
+        candidates = [
+            "/usr/bin/firefox-esr",
+            "/usr/bin/firefox",
+            "/opt/firefox/firefox",
+            shutil.which("firefox-esr"),
+            shutil.which("firefox"),
+            r"C:\Program Files\Mozilla Firefox\firefox.exe",
+            r"C:\Program Files (x86)\Mozilla Firefox\firefox.exe",
+            os.path.expandvars(r"%LOCALAPPDATA%\Mozilla Firefox\firefox.exe"),
+            os.path.expandvars(r"%PROGRAMFILES%\Mozilla Firefox\firefox.exe"),
+            os.path.expandvars(r"%PROGRAMFILES(X86)%\Mozilla Firefox\firefox.exe"),
+        ]
+        for path in candidates:
+            if path and os.path.exists(path):
+                return path
+        return None
+
+    def _find_geckodriver(self) -> Optional[str]:
+        candidates = [
+            "/usr/local/bin/geckodriver",
+            "/usr/bin/geckodriver",
+            shutil.which("geckodriver"),
+            r"C:\Program Files\Mozilla Firefox\geckodriver.exe",
+            r"C:\geckodriver\geckodriver.exe",
+        ]
+        for path in candidates:
+            if path and os.path.exists(path):
+                return path
+        return None
+
+    def _find_chrome_binary(self) -> Optional[str]:
+        candidates = [
+            "/usr/bin/google-chrome",
+            "/usr/bin/chrome",
+            "/usr/bin/google-chrome-stable",
+            "/usr/bin/chromium",
+            "/usr/bin/chromium-browser",
+            "/opt/chrome-linux64/chrome",
+            "/opt/chrome/chrome",
+            shutil.which("google-chrome"),
+            shutil.which("chrome"),
+            shutil.which("chromium"),
+            r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+            r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+            os.path.expandvars(r"%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe"),
+            os.path.expandvars(r"%PROGRAMFILES%\Google\Chrome\Application\chrome.exe"),
+            os.path.expandvars(r"%PROGRAMFILES(X86)%\Google\Chrome\Application\chrome.exe"),
+        ]
+        for path in candidates:
+            if path and os.path.exists(path):
+                return path
+        return None
+
+    def _find_chromedriver(self) -> Optional[str]:
+        candidates = [
+            "/usr/bin/chromedriver",
+            "/usr/local/bin/chromedriver",
+            "/opt/chromedriver-linux64/chromedriver",
+            shutil.which("chromedriver"),
+            r"C:\chromedriver\chromedriver.exe",
+            r"C:\Program Files\Google\Chrome\Application\chromedriver.exe",
+        ]
+        for path in candidates:
+            if path and os.path.exists(path):
+                return path
+        return None
+
+    def _init_firefox_driver(self) -> None:
+        self.log("Checking for lightweight Firefox ESR (Gecko) browser...")
+        
+        # Immediate pre-check: ensure binary exists to prevent selenium-manager network hang
+        firefox_binary = self._find_firefox_binary()
+        if not firefox_binary:
+            raise FileNotFoundError("Firefox/Firefox-ESR is not installed on this system.")
+            
+        self.log(f"Found Firefox binary at: {firefox_binary}")
+        
+        is_headless = self.headless
+        if sys.platform.startswith("linux") and "DISPLAY" not in os.environ:
+            is_headless = True
+            
+        firefox_options = FirefoxOptions()
+        firefox_options.binary_location = firefox_binary
+        firefox_options.page_load_strategy = "normal"
+        
+        if is_headless:
+            firefox_options.add_argument("-headless")
+            
+        # Low-memory optimizations for < 512MB RAM environments
+        # 1. Block images at engine level to save ~60-70% RAM
+        firefox_options.set_preference("permissions.default.image", 2)
+        # 2. Block media streams, notifications, audio, geolocation
+        firefox_options.set_preference("permissions.default.media_stream", 2)
+        firefox_options.set_preference("permissions.default.desktop-notification", 2)
+        firefox_options.set_preference("permissions.default.geo", 2)
+        firefox_options.set_preference("media.autoplay.default", 5)
+        firefox_options.set_preference("media.volume_scale", "0.0")
+        
+        # 3. Limit content processes (single IPC content process significantly saves RAM)
+        firefox_options.set_preference("dom.ipc.processCount", 1)
+        firefox_options.set_preference("browser.tabs.remote.separatePrivilegedContentProcess", False)
+        
+        # 4. Aggressive memory & cache management
+        firefox_options.set_preference("browser.cache.disk.enable", False)
+        firefox_options.set_preference("browser.cache.memory.enable", True)
+        firefox_options.set_preference("browser.cache.memory.capacity", 4096)  # 4MB memory cache
+        firefox_options.set_preference("browser.sessionhistory.max_entries", 2)
+        firefox_options.set_preference("image.mem.decode_bytes_at_a_time", 4096)
+        
+        # 5. Disable WebGL & hardware acceleration
+        firefox_options.set_preference("webgl.disabled", True)
+        firefox_options.set_preference("layers.acceleration.disabled", True)
+        firefox_options.set_preference("gfx.direct2d.disabled", True)
+        
+        # Stealth & Anti-bot detection
+        user_agent = random.choice(USER_AGENTS)
+        firefox_options.set_preference("general.useragent.override", user_agent)
+        firefox_options.set_preference("dom.webdriver.enabled", False)
+        firefox_options.set_preference("useAutomationExtension", False)
+        
+        # Window size
+        firefox_options.add_argument("--width=1280")
+        firefox_options.add_argument("--height=720")
+            
+        # Detect pre-installed Geckodriver executable
+        geckodriver_path = self._find_geckodriver()
+        if geckodriver_path:
+            self.log(f"Using pre-installed Geckodriver: {geckodriver_path}")
+            service = FirefoxService(executable_path=geckodriver_path)
+            self.driver = webdriver.Firefox(service=service, options=firefox_options)
+        else:
+            self.driver = webdriver.Firefox(options=firefox_options)
+            
+        self.driver.set_page_load_timeout(PAGE_LOAD_TIMEOUT)
+        self.log("Firefox ESR (Gecko) initialized successfully as primary browser.")
+
+    def _init_chrome_driver(self) -> None:
+        self.log("Initializing ChromeDriver (Chrome fallback)...")
         
         # Enforce headless mode in Linux environments without a display server
         is_headless = self.headless
         if sys.platform.startswith("linux") and "DISPLAY" not in os.environ:
             is_headless = True
 
-        chrome_options = Options()
+        chrome_options = ChromeOptions()
         
         if is_headless:
             chrome_options.add_argument("--headless=new")
@@ -114,59 +257,39 @@ class ProductScraper:
         chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
         chrome_options.add_experimental_option("useAutomationExtension", False)
 
-        # Detect Chrome binary if available in standard Linux/container locations
-        chrome_binary = None
-        for path in [
-            "/usr/bin/google-chrome",
-            "/usr/bin/chrome",
-            "/usr/bin/google-chrome-stable",
-            "/usr/bin/chromium",
-            "/usr/bin/chromium-browser",
-            "/opt/chrome-linux64/chrome",
-            "/opt/chrome/chrome"
-        ]:
-            if os.path.exists(path):
-                chrome_binary = path
-                break
+        # Detect Chrome binary if available
+        chrome_binary = self._find_chrome_binary()
         if chrome_binary:
+            self.log(f"Using Chrome binary at: {chrome_binary}")
             chrome_options.binary_location = chrome_binary
 
         # Detect pre-installed ChromeDriver executable
-        chromedriver_path = None
-        for path in [
-            "/usr/bin/chromedriver",
-            "/usr/local/bin/chromedriver",
-            "/opt/chromedriver-linux64/chromedriver",
-            shutil.which("chromedriver")
-        ]:
-            if path and os.path.exists(path):
-                chromedriver_path = path
-                break
+        chromedriver_path = self._find_chromedriver()
 
         try:
             if chromedriver_path:
                 self.log(f"Using pre-installed ChromeDriver: {chromedriver_path}")
-                service = Service(executable_path=chromedriver_path)
+                service = ChromeService(executable_path=chromedriver_path)
                 self.driver = webdriver.Chrome(service=service, options=chrome_options)
             else:
                 self.driver = webdriver.Chrome(options=chrome_options)
             
             # Execute CDP command to override navigator.webdriver and user agent at network layer
-            self.driver.execute_cdp_cmd(
-                "Page.addScriptToEvaluateOnNewDocument",
-                {
-                    "source": "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
-                }
-            )
-            self.driver.execute_cdp_cmd(
-                "Network.setUserAgentOverride",
-                {
-                    "userAgent": user_agent
-                }
-            )
-
-            # Block heavy network resources (images, fonts, ads, trackers) via CDP Network blocking
             try:
+                self.driver.execute_cdp_cmd(
+                    "Page.addScriptToEvaluateOnNewDocument",
+                    {
+                        "source": "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
+                    }
+                )
+                self.driver.execute_cdp_cmd(
+                    "Network.setUserAgentOverride",
+                    {
+                        "userAgent": user_agent
+                    }
+                )
+
+                # Block heavy network resources (images, fonts, ads, trackers) via CDP Network blocking
                 self.driver.execute_cdp_cmd("Network.enable", {})
                 self.driver.execute_cdp_cmd("Network.setBlockedURLs", {
                     "urls": [
@@ -185,6 +308,19 @@ class ProductScraper:
         except Exception as e:
             self.log(f"Failed to start ChromeDriver: {str(e)}")
             raise e
+
+    def init_driver(self) -> None:
+        try:
+            self._init_firefox_driver()
+            return
+        except Exception as fe:
+            self.log(f"Firefox ESR not available or initialization skipped ({str(fe)}). Falling back immediately to Chrome...")
+        
+        try:
+            self._init_chrome_driver()
+        except Exception as ce:
+            self.log(f"All browser initializations failed. Last error: {str(ce)}")
+            raise ce
 
     def wait_for_element(self, selector: str, by=By.CSS_SELECTOR, timeout=SELENIUM_TIMEOUT) -> Any:
         return WebDriverWait(self.driver, timeout).until(
@@ -610,7 +746,7 @@ class ProductScraper:
                         bullets = detail_soup.select(selectors["detail_about"])
                         for bullet in bullets:
                             txt = bullet.get_text().strip()
-                            if txt and len(txt) > 5:
+                            if txt and len(txt) > 5 and txt not in about_items:
                                 about_items.append(txt)
                                 
                         # Fallback bullet details from lists if empty
